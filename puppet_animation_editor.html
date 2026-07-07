@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<title>Marionnette animation</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #10151b;
+    --panel: #18202a;
+    --panel-2: #222c37;
+    --line: #334150;
+    --text: #f2f6fa;
+    --muted: #a7b4bf;
+    --accent: #2da8ff;
+    --rec: #f04f4f;
+    --good: #55d68a;
+    --gold: #f4cf55;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Arial, sans-serif;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr) 330px;
+    height: 100vh;
+  }
+
+  aside {
+    padding: 14px;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    overflow: auto;
+  }
+
+  aside:last-child {
+    border-left: 1px solid var(--line);
+    border-right: 0;
+  }
+
+  main {
+    position: relative;
+    min-width: 0;
+    background: #9ab4c4;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  h1 {
+    margin: 0 0 14px;
+    font-size: 20px;
+  }
+
+  h2 {
+    margin: 18px 0 10px;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  label {
+    display: block;
+    margin: 10px 0 6px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  input, select, textarea, button {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel-2);
+    color: var(--text);
+    font: inherit;
+  }
+
+  input, select {
+    height: 36px;
+    padding: 0 10px;
+  }
+
+  textarea {
+    min-height: 265px;
+    padding: 10px;
+    resize: vertical;
+    font: 12px Consolas, monospace;
+    line-height: 1.45;
+  }
+
+  button {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  button.primary {
+    border-color: #1474bb;
+    background: var(--accent);
+    color: #06111b;
+  }
+
+  button.recording {
+    border-color: #b52d2d;
+    background: var(--rec);
+    color: #fff;
+  }
+
+  button.good {
+    border-color: #2f9359;
+    background: var(--good);
+    color: #06130b;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .row.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stack {
+    display: grid;
+    gap: 8px;
+  }
+
+  #viewport {
+    position: relative;
+  }
+
+  #labels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .joint-label {
+    position: absolute;
+    transform: translate(-50%, -130%);
+    padding: 3px 6px;
+    border-radius: 5px;
+    background: rgba(12, 16, 20, .78);
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .joint-label.active {
+    background: rgba(45, 168, 255, .9);
+    color: #06111b;
+    font-weight: 700;
+  }
+
+  #status {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    max-width: calc(100% - 28px);
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(12, 16, 20, .78);
+    color: var(--text);
+    font: 13px Consolas, monospace;
+    pointer-events: none;
+  }
+
+  #recLamp {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: #52606f;
+  }
+
+  #recLamp.on {
+    background: var(--rec);
+    box-shadow: 0 0 0 5px rgba(240, 79, 79, .18);
+  }
+
+  .meter {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  #keyList {
+    display: grid;
+    gap: 6px;
+  }
+
+  .key-item {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel-2);
+    font-size: 12px;
+  }
+
+  .key-frame {
+    color: var(--gold);
+    font-weight: 700;
+  }
+
+  .help {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 1050px) {
+    #app {
+      grid-template-columns: 280px minmax(0, 1fr);
+    }
+
+    aside:last-child {
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <h1>Marionnette</h1>
+
+    <label for="modelSelect">Personnage</label>
+    <select id="modelSelect">
+      <option value="bot">Bot Azure Titan</option>
+      <option value="pinstripe">Pinstripe rigged</option>
+    </select>
+
+    <div class="row">
+      <button id="reloadModel">Recharger</button>
+      <button id="backToGame">Jeu</button>
+    </div>
+
+    <h2>Enregistrement</h2>
+    <label for="clipName">Nom du mouvement</label>
+    <input id="clipName" value="Custom_Move">
+
+    <div class="row">
+      <div>
+        <label for="fpsInput">FPS</label>
+        <input id="fpsInput" type="number" min="6" max="60" value="24">
+      </div>
+      <div>
+        <label for="durationInput">Secondes</label>
+        <input id="durationInput" type="number" min="1" max="20" step="0.5" value="3">
+      </div>
+    </div>
+
+    <div class="meter"><span id="recLamp"></span><span id="recText">Pret</span></div>
+
+    <div class="stack" style="margin-top:8px">
+      <button id="recordButton" class="recording">Demarrer enregistrement</button>
+      <button id="stopButton">Arreter</button>
+    </div>
+
+    <div class="row" style="margin-top:8px">
+      <button id="playButton" class="primary">Lire</button>
+      <button id="restButton">Repos</button>
+    </div>
+
+    <button id="poseKeyButton" class="good" style="margin-top:8px">Sauver pose actuelle</button>
+
+    <h2>Points</h2>
+    <div class="help">
+      Tire les boules directement sur le personnage. Les bras, les jambes et le buste suivent avec un IK simple.
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="showLabelsButton">Labels</button>
+      <button id="showSkeletonButton">Squelette</button>
+    </div>
+
+    <h2>Manette</h2>
+    <button id="gamepadButton" class="primary">Activer manette</button>
+    <label for="gamepadSelect">Peripherique</label>
+    <select id="gamepadSelect">
+      <option value="auto">Auto: Thrustmaster</option>
+    </select>
+    <button id="refreshGamepads" style="margin-top:8px">Rafraichir liste</button>
+    <div class="meter" style="margin-top:8px"><span id="gamepadText">Inactive</span></div>
+    <div id="gamepadDebug" class="help" style="margin-top:8px">
+      LB/RB changent de point. Stick gauche deplace le point. Stick droit ajuste la profondeur. A enregistre, B remet au repos, X sauve une pose, Y lit.
+    </div>
+  </aside>
+
+  <main id="viewport">
+    <div id="labels"></div>
+    <div id="status">Chargement...</div>
+  </main>
+
+  <aside>
+    <h2>Sortie</h2>
+    <div class="row">
+      <button id="exportButton" class="primary">Exporter JSON</button>
+      <button id="downloadButton">Telecharger</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="copyButton">Copier</button>
+      <button id="clearButton">Vider</button>
+    </div>
+
+    <h2>Keyframes</h2>
+    <div id="keyList"></div>
+
+    <h2>JSON</h2>
+    <textarea id="jsonOut" spellcheck="false"></textarea>
+  </aside>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./libs/three.module.js",
+    "three/addons/": "./libs/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+const MODELS = {
+  bot: {
+    label: "Bot Azure Titan",
+    url: "./perso/Meshy_AI_Azure_Titan_biped/Meshy_AI_Azure_Titan_biped_Meshy_AI_Meshy_Merged_Animations.glb"
+  },
+  pinstripe: {
+    label: "Pinstripe rigged",
+    url: "./perso/Meshy_AI_Pinstripe_Shadows/Meshy_AI_Pinstripe_Shadows_rigged_animations.glb"
+  }
+};
+
+const JOINT_DEFS = [
+  { id: "chin", label: "Menton", color: 0xfff2a6, end: ["headfront", "Head"], chain: ["Head", "neck"] },
+  { id: "lShoulder", label: "Epaule G", color: 0x74d1ff, end: ["LeftArm"], chain: ["Chest", "Spine02", "Spine01", "Spine"] },
+  { id: "rShoulder", label: "Epaule D", color: 0x74d1ff, end: ["RightArm"], chain: ["Chest", "Spine02", "Spine01", "Spine"] },
+  { id: "lElbow", label: "Coude G", color: 0x42ff9b, end: ["LeftForeArm"], chain: ["LeftArm"] },
+  { id: "rElbow", label: "Coude D", color: 0x42ff9b, end: ["RightForeArm"], chain: ["RightArm"] },
+  { id: "lWrist", label: "Poignet G", color: 0xffb447, end: ["LeftHand"], chain: ["LeftForeArm", "LeftArm"] },
+  { id: "rWrist", label: "Poignet D", color: 0xffb447, end: ["RightHand"], chain: ["RightForeArm", "RightArm"] },
+  { id: "belt", label: "Ceinture", color: 0xff5d5d, end: ["Hips"], chain: [], translate: true },
+  { id: "lKnee", label: "Genou G", color: 0xb388ff, end: ["LeftLeg"], chain: ["LeftUpLeg"] },
+  { id: "rKnee", label: "Genou D", color: 0xb388ff, end: ["RightLeg"], chain: ["RightUpLeg"] },
+  { id: "lAnkle", label: "Cheville G", color: 0xffffff, end: ["LeftFoot"], chain: ["LeftLeg", "LeftUpLeg"] },
+  { id: "rAnkle", label: "Cheville D", color: 0xffffff, end: ["RightFoot"], chain: ["RightLeg", "RightUpLeg"] }
+];
+
+const dom = {
+  viewport: document.getElementById("viewport"),
+  labels: document.getElementById("labels"),
+  status: document.getElementById("status"),
+  modelSelect: document.getElementById("modelSelect"),
+  reloadModel: document.getElementById("reloadModel"),
+  backToGame: document.getElementById("backToGame"),
+  clipName: document.getElementById("clipName"),
+  fpsInput: document.getElementById("fpsInput"),
+  durationInput: document.getElementById("durationInput"),
+  recLamp: document.getElementById("recLamp"),
+  recText: document.getElementById("recText"),
+  recordButton: document.getElementById("recordButton"),
+  stopButton: document.getElementById("stopButton"),
+  playButton: document.getElementById("playButton"),
+  restButton: document.getElementById("restButton"),
+  poseKeyButton: document.getElementById("poseKeyButton"),
+  showLabelsButton: document.getElementById("showLabelsButton"),
+  showSkeletonButton: document.getElementById("showSkeletonButton"),
+  gamepadButton: document.getElementById("gamepadButton"),
+  gamepadSelect: document.getElementById("gamepadSelect"),
+  refreshGamepads: document.getElementById("refreshGamepads"),
+  gamepadText: document.getElementById("gamepadText"),
+  gamepadDebug: document.getElementById("gamepadDebug"),
+  exportButton: document.getElementById("exportButton"),
+  downloadButton: document.getElementById("downloadButton"),
+  copyButton: document.getElementById("copyButton"),
+  clearButton: document.getElementById("clearButton"),
+  keyList: document.getElementById("keyList"),
+  jsonOut: document.getElementById("jsonOut")
+};
+
+let scene, camera, renderer, controls;
+let model = null;
+let skeletonHelper = null;
+let bones = [];
+let boneMap = new Map();
+let restRotations = new Map();
+let restPositions = new Map();
+let joints = [];
+let jointGroup = new THREE.Group();
+let selectedJoint = null;
+let draggingJoint = null;
+let selectedJointIndex = 0;
+let dragPlane = new THREE.Plane();
+let dragOffset = new THREE.Vector3();
+let raycaster = new THREE.Raycaster();
+let pointer = new THREE.Vector2();
+let showLabels = true;
+let showSkeleton = true;
+let recording = false;
+let playing = false;
+let gamepadEnabled = false;
+let activeGamepadIndex = null;
+let selectedGamepadIndex = null;
+let lastGamepadButtons = [];
+let lastAnimationTick = performance.now();
+let lastGamepadListRefresh = 0;
+let recordStartTime = 0;
+let playStartTime = 0;
+let lastRecordedFrame = -1;
+
+let clip = {
+  name: "Custom_Move",
+  end: 72,
+  loop: false,
+  space: "offset",
+  keys: []
+};
+
+const tmpVecA = new THREE.Vector3();
+const tmpVecB = new THREE.Vector3();
+const tmpQuatA = new THREE.Quaternion();
+const tmpQuatB = new THREE.Quaternion();
+const tmpQuatC = new THREE.Quaternion();
+
+init();
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x9ab4c4);
+
+  camera = new THREE.PerspectiveCamera(55, 1, 0.05, 500);
+  camera.position.set(4.5, 2.7, 6);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  dom.viewport.appendChild(renderer.domElement);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 1.2, 0);
+  controls.enableDamping = true;
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x5c6570, 1.8));
+  const light = new THREE.DirectionalLight(0xffffff, 2.2);
+  light.position.set(5, 8, 4);
+  scene.add(light);
+
+  const grid = new THREE.GridHelper(10, 20, 0xf3f5f8, 0x677580);
+  grid.material.transparent = true;
+  grid.material.opacity = 0.46;
+  scene.add(grid);
+  scene.add(jointGroup);
+
+  bindEvents();
+  resize();
+  window.addEventListener("resize", resize);
+  loadModel();
+  animate();
+
+  window.__puppetEditor = {
+    state: () => ({
+      bones: bones.length,
+      joints: joints.map(j => j.id),
+      keys: clip.keys.length,
+      recording,
+      playing,
+      clip: exportObject()
+    }),
+    moveJoint: (id, x, y, z) => {
+      const joint = joints.find(item => item.id === id);
+      if (!joint) return false;
+      selectJoint(joint);
+      moveJoint(joint, new THREE.Vector3(x, y, z));
+      updateJointsFromBones();
+      return true;
+    },
+    startRecording,
+    stopRecording,
+    savePoseKey,
+    exportObject
+  };
+}
+
+function bindEvents() {
+  dom.reloadModel.addEventListener("click", loadModel);
+  dom.modelSelect.addEventListener("change", loadModel);
+  dom.backToGame.addEventListener("click", () => location.href = "raphael2.html");
+  dom.recordButton.addEventListener("click", startRecording);
+  dom.stopButton.addEventListener("click", stopRecording);
+  dom.playButton.addEventListener("click", togglePlayback);
+  dom.restButton.addEventListener("click", () => {
+    stopRecording();
+    playing = false;
+    resetPose();
+    updateJointsFromBones();
+    setStatus("Pose de repos.");
+  });
+  dom.poseKeyButton.addEventListener("click", savePoseKey);
+  dom.showLabelsButton.addEventListener("click", () => {
+    showLabels = !showLabels;
+    dom.labels.style.display = showLabels ? "block" : "none";
+  });
+  dom.showSkeletonButton.addEventListener("click", () => {
+    showSkeleton = !showSkeleton;
+    if (skeletonHelper) skeletonHelper.visible = showSkeleton;
+  });
+  dom.gamepadButton.addEventListener("click", enableGamepad);
+  dom.refreshGamepads.addEventListener("click", refreshGamepadList);
+  dom.gamepadSelect.addEventListener("change", () => {
+    selectedGamepadIndex = dom.gamepadSelect.value === "auto" ? null : Number(dom.gamepadSelect.value);
+    activeGamepadIndex = selectedGamepadIndex;
+    lastGamepadButtons = [];
+    const gamepad = findGamepad();
+    setStatus(gamepad ? "Manette choisie: " + gamepad.id : "Choisis la Thrustmaster, pas le JBL.");
+  });
+  dom.exportButton.addEventListener("click", updateJsonOutput);
+  dom.downloadButton.addEventListener("click", downloadJson);
+  dom.copyButton.addEventListener("click", copyJson);
+  dom.clearButton.addEventListener("click", clearClip);
+
+  renderer.domElement.addEventListener("pointerdown", onPointerDown);
+  renderer.domElement.addEventListener("pointermove", onPointerMove);
+  renderer.domElement.addEventListener("pointerup", onPointerUp);
+  renderer.domElement.addEventListener("pointercancel", onPointerUp);
+  window.addEventListener("gamepadconnected", event => {
+    if (!isIgnoredGamepad(event.gamepad)) activeGamepadIndex = event.gamepad.index;
+    refreshGamepadList();
+    if (gamepadEnabled) setStatus("Manette detectee: " + event.gamepad.id);
+  });
+  window.addEventListener("gamepaddisconnected", event => {
+    if (activeGamepadIndex === event.gamepad.index) activeGamepadIndex = null;
+    if (selectedGamepadIndex === event.gamepad.index) selectedGamepadIndex = null;
+    refreshGamepadList();
+    dom.gamepadText.textContent = "Deconnectee";
+  });
+}
+
+function resize() {
+  const rect = dom.viewport.getBoundingClientRect();
+  renderer.setSize(rect.width, rect.height, false);
+  camera.aspect = rect.width / Math.max(1, rect.height);
+  camera.updateProjectionMatrix();
+}
+
+function loadModel() {
+  const option = MODELS[dom.modelSelect.value] || MODELS.bot;
+  stopRecording();
+  playing = false;
+  clip.keys = [];
+  updateRecordUi();
+  setStatus("Chargement " + option.label + "...");
+
+  if (model) scene.remove(model);
+  if (skeletonHelper) scene.remove(skeletonHelper);
+  jointGroup.clear();
+  dom.labels.innerHTML = "";
+  model = null;
+  skeletonHelper = null;
+  joints = [];
+  bones = [];
+  boneMap.clear();
+  restRotations.clear();
+  restPositions.clear();
+
+  new GLTFLoader().load(option.url + "?v=" + Date.now(), gltf => {
+    model = gltf.scene;
+    model.traverse(node => {
+      if (node.isMesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
+        node.frustumCulled = false;
+        if (node.material) node.material.side = THREE.DoubleSide;
+      }
+    });
+    fitModel(model);
+    scene.add(model);
+    collectBones();
+    createJoints();
+    if (joints.length) selectJoint(joints[0], false);
+    skeletonHelper = new THREE.SkeletonHelper(model);
+    skeletonHelper.visible = showSkeleton;
+    scene.add(skeletonHelper);
+    updateJointsFromBones();
+    updateJsonOutput();
+    setStatus(option.label + " charge: " + bones.length + " os, " + joints.length + " points.");
+  }, undefined, error => {
+    console.error(error);
+    setStatus("Erreur: " + error.message);
+  });
+}
+
+function fitModel(root) {
+  root.scale.setScalar(1);
+  root.rotation.set(0, 0, 0);
+  root.position.set(0, 0, 0);
+  root.updateMatrixWorld(true);
+
+  let box = new THREE.Box3().setFromObject(root);
+  let size = box.getSize(new THREE.Vector3());
+  const scale = 2.7 / Math.max(size.x, size.y, size.z, 0.001);
+  root.scale.setScalar(scale);
+  root.updateMatrixWorld(true);
+
+  box = new THREE.Box3().setFromObject(root);
+  const center = box.getCenter(new THREE.Vector3());
+  root.position.x -= center.x;
+  root.position.z -= center.z;
+  root.position.y -= box.min.y;
+  root.updateMatrixWorld(true);
+
+  controls.target.set(0, 1.25, 0);
+  controls.update();
+}
+
+function collectBones() {
+  model.traverse(node => {
+    if (!node.isBone) return;
+    bones.push(node);
+    boneMap.set(node.name.toLowerCase(), node);
+    restRotations.set(node.name, node.rotation.clone());
+    restPositions.set(node.name, node.position.clone());
+  });
+}
+
+function createJoints() {
+  const sphere = new THREE.SphereGeometry(0.075, 18, 12);
+  JOINT_DEFS.forEach(def => {
+    const endBone = findBone(def.end);
+    const chainBones = def.chain.map(name => findBone([name])).filter(Boolean);
+    if (!endBone) return;
+
+    const mesh = new THREE.Mesh(
+      sphere,
+      new THREE.MeshStandardMaterial({
+        color: def.color,
+        roughness: 0.35,
+        metalness: 0.1,
+        emissive: def.color,
+        emissiveIntensity: 0.12
+      })
+    );
+    mesh.userData.jointId = def.id;
+    jointGroup.add(mesh);
+
+    const label = document.createElement("div");
+    label.className = "joint-label";
+    label.textContent = def.label;
+    dom.labels.appendChild(label);
+
+    joints.push({ ...def, mesh, label, endBone, chainBones });
+  });
+}
+
+function selectJoint(joint, announce = true) {
+  if (!joint) return;
+  selectedJoint = joint;
+  selectedJointIndex = Math.max(0, joints.indexOf(joint));
+  updateJointSelectionVisuals();
+  if (announce) setStatus("Point actif: " + joint.label);
+}
+
+function selectJointByOffset(offset) {
+  if (!joints.length) return;
+  const nextIndex = (selectedJointIndex + offset + joints.length) % joints.length;
+  selectJoint(joints[nextIndex]);
+}
+
+function updateJointSelectionVisuals() {
+  joints.forEach(joint => {
+    const active = joint === selectedJoint;
+    joint.mesh.scale.setScalar(active ? 1.65 : 1);
+    joint.label.classList.toggle("active", active);
+  });
+}
+
+function findBone(names) {
+  for (const name of names) {
+    const exact = boneMap.get(String(name).toLowerCase());
+    if (exact) return exact;
+  }
+  for (const name of names) {
+    const wanted = String(name).toLowerCase();
+    const found = bones.find(bone => bone.name.toLowerCase().endsWith(wanted) || bone.name.toLowerCase().includes(wanted));
+    if (found) return found;
+  }
+  return null;
+}
+
+function updateJointsFromBones() {
+  model.updateMatrixWorld(true);
+  joints.forEach(joint => {
+    joint.endBone.getWorldPosition(joint.mesh.position);
+  });
+  jointGroup.updateMatrixWorld(true);
+  if (skeletonHelper) skeletonHelper.updateMatrixWorld(true);
+}
+
+function onPointerDown(event) {
+  setPointer(event);
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(joints.map(joint => joint.mesh), false);
+  if (!hits.length) return;
+
+  const id = hits[0].object.userData.jointId;
+  draggingJoint = joints.find(joint => joint.id === id);
+  if (!draggingJoint) return;
+  selectJoint(draggingJoint);
+
+  controls.enabled = false;
+  const normal = camera.getWorldDirection(new THREE.Vector3()).normalize();
+  dragPlane.setFromNormalAndCoplanarPoint(normal, draggingJoint.mesh.position);
+  raycaster.ray.intersectPlane(dragPlane, tmpVecA);
+  dragOffset.copy(draggingJoint.mesh.position).sub(tmpVecA);
+  setStatus("Point: " + draggingJoint.label);
+  renderer.domElement.setPointerCapture(event.pointerId);
+}
+
+function onPointerMove(event) {
+  if (!draggingJoint) return;
+  setPointer(event);
+  raycaster.setFromCamera(pointer, camera);
+  if (!raycaster.ray.intersectPlane(dragPlane, tmpVecA)) return;
+  const target = tmpVecA.clone().add(dragOffset);
+  moveJoint(draggingJoint, target);
+  updateJointsFromBones();
+  if (!recording) {
+    setStatus("Point: " + draggingJoint.label);
+  }
+}
+
+function onPointerUp(event) {
+  if (draggingJoint && renderer.domElement.hasPointerCapture(event.pointerId)) {
+    renderer.domElement.releasePointerCapture(event.pointerId);
+  }
+  draggingJoint = null;
+  controls.enabled = true;
+}
+
+function setPointer(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+}
+
+function moveJoint(joint, target) {
+  if (joint.translate) {
+    moveBoneLocal(joint.endBone, target);
+    return;
+  }
+  solveIk(joint.endBone, joint.chainBones, target, joint.id.includes("Shoulder") ? 5 : 9);
+}
+
+function enableGamepad() {
+  gamepadEnabled = true;
+  refreshGamepadList();
+  const gamepad = findGamepad();
+  if (gamepad) {
+    activeGamepadIndex = gamepad.index;
+    setStatus("Manette active: " + gamepad.id);
+  } else {
+    setStatus("JBL ignore. Appuie sur un bouton de la Thrustmaster ou choisis-la dans la liste.");
+  }
+}
+
+function findGamepad() {
+  const pads = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(Boolean);
+
+  if (selectedGamepadIndex !== null) {
+    const selected = pads.find(pad => pad.index === selectedGamepadIndex);
+    return selected && !isIgnoredGamepad(selected) ? selected : null;
+  }
+
+  if (activeGamepadIndex !== null) {
+    const active = pads.find(pad => pad.index === activeGamepadIndex);
+    if (active && !isIgnoredGamepad(active)) return active;
+  }
+
+  return pads.find(pad => isPreferredGamepad(pad) && !isIgnoredGamepad(pad))
+      || pads.find(pad => !isIgnoredGamepad(pad))
+      || null;
+}
+
+function refreshGamepadList() {
+  lastGamepadListRefresh = performance.now();
+  const previous = dom.gamepadSelect.value;
+  const pads = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(Boolean);
+  dom.gamepadSelect.innerHTML = "";
+
+  const auto = document.createElement("option");
+  auto.value = "auto";
+  auto.textContent = "Auto: Thrustmaster";
+  dom.gamepadSelect.appendChild(auto);
+
+  pads.forEach(pad => {
+    const option = document.createElement("option");
+    option.value = String(pad.index);
+    const ignored = isIgnoredGamepad(pad) ? "ignore: " : "";
+    const preferred = isPreferredGamepad(pad) ? "Thrustmaster: " : "";
+    option.textContent = "#" + pad.index + " " + ignored + preferred + pad.id;
+    dom.gamepadSelect.appendChild(option);
+  });
+
+  if ([...dom.gamepadSelect.options].some(option => option.value === previous)) {
+    dom.gamepadSelect.value = previous;
+  } else {
+    dom.gamepadSelect.value = "auto";
+    selectedGamepadIndex = null;
+  }
+}
+
+function isIgnoredGamepad(gamepad) {
+  return /jbl|quantum|stream|headset|microphone|speaker|audio|0ecb|205f/i.test(gamepad.id || "");
+}
+
+function isPreferredGamepad(gamepad) {
+  return /thrust|t\.?flight|t-flight|hotas|044f|b106|joystick/i.test(gamepad.id || "");
+}
+
+function updateGamepad(delta) {
+  if (!gamepadEnabled) return;
+  if (performance.now() - lastGamepadListRefresh > 1000) refreshGamepadList();
+  const gamepad = findGamepad();
+  if (!gamepad) {
+    const pads = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(Boolean);
+    const ignored = pads.filter(isIgnoredGamepad);
+    dom.gamepadText.textContent = ignored.length ? "JBL ignore. Appuie sur Thrustmaster." : "Appuie sur un bouton Thrustmaster";
+    return;
+  }
+
+  activeGamepadIndex = gamepad.index;
+  const axes = gamepad.axes || [];
+  const buttons = gamepad.buttons || [];
+  const pressed = index => Boolean(buttons[index] && buttons[index].pressed);
+  const justPressed = index => pressed(index) && !lastGamepadButtons[index];
+
+  if (justPressed(4) || justPressed(14)) selectJointByOffset(-1);
+  if (justPressed(5) || justPressed(15)) selectJointByOffset(1);
+  if (justPressed(0)) recording ? stopRecording() : startRecording();
+  if (justPressed(1)) {
+    resetPose();
+    updateJointsFromBones();
+    setStatus("Pose de repos.");
+  }
+  if (justPressed(2)) savePoseKey();
+  if (justPressed(3)) togglePlayback();
+
+  moveSelectedJointWithAxes(axes, delta);
+
+  const axesText = axes.slice(0, 4).map(value => value.toFixed(2)).join(" ");
+  const buttonText = buttons.map((button, index) => button.pressed ? index : null).filter(value => value !== null).join(",");
+  dom.gamepadText.textContent = gamepad.id.slice(0, 42) + " | axes " + axesText + (buttonText ? " | btn " + buttonText : "");
+  lastGamepadButtons = buttons.map(button => button.pressed);
+}
+
+function moveSelectedJointWithAxes(axes, delta) {
+  if (!selectedJoint || !axes.length) return;
+  const deadzone = 0.14;
+  const axis = index => Math.abs(axes[index] || 0) > deadzone ? axes[index] : 0;
+  const x = axis(0);
+  const y = axis(1);
+  const z = axis(3) || axis(2);
+  if (!x && !y && !z) return;
+
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+  const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+  const forward = camera.getWorldDirection(new THREE.Vector3()).normalize();
+  const speed = 1.7;
+  const target = selectedJoint.mesh.position.clone()
+    .addScaledVector(right, x * speed * delta)
+    .addScaledVector(up, -y * speed * delta)
+    .addScaledVector(forward, -z * speed * delta);
+
+  moveJoint(selectedJoint, target);
+  updateJointsFromBones();
+}
+
+function moveBoneLocal(bone, targetWorld) {
+  const parent = bone.parent;
+  const local = targetWorld.clone();
+  if (parent) parent.worldToLocal(local);
+  bone.position.copy(local);
+  model.updateMatrixWorld(true);
+}
+
+function solveIk(endBone, chainBones, targetWorld, iterations) {
+  if (!endBone || !chainBones.length) return;
+
+  for (let i = 0; i < iterations; i++) {
+    for (const bone of chainBones) {
+      model.updateMatrixWorld(true);
+      bone.getWorldPosition(tmpVecA);
+      endBone.getWorldPosition(tmpVecB);
+
+      const toEnd = tmpVecB.sub(tmpVecA).normalize();
+      const toTarget = targetWorld.clone().sub(tmpVecA).normalize();
+      if (toEnd.lengthSq() < 0.000001 || toTarget.lengthSq() < 0.000001) continue;
+
+      tmpQuatA.setFromUnitVectors(toEnd, toTarget);
+      bone.getWorldQuaternion(tmpQuatB);
+      tmpQuatB.premultiply(tmpQuatA);
+
+      if (bone.parent) {
+        bone.parent.getWorldQuaternion(tmpQuatC).invert();
+        tmpQuatB.premultiply(tmpQuatC);
+      }
+      bone.quaternion.copy(tmpQuatB);
+    }
+  }
+  model.updateMatrixWorld(true);
+}
+
+function startRecording() {
+  if (!model || recording) return;
+  resetPose();
+  clip = {
+    name: cleanName(dom.clipName.value || "Custom_Move"),
+    end: durationFrames(),
+    loop: false,
+    space: "offset",
+    keys: []
+  };
+  recording = true;
+  playing = false;
+  recordStartTime = performance.now();
+  lastRecordedFrame = -1;
+  samplePose(1);
+  updateRecordUi();
+  setStatus("Enregistrement demarre. Bouge les points.");
+}
+
+function stopRecording() {
+  if (!recording) return;
+  recording = false;
+  samplePose(Math.max(1, lastRecordedFrame + 1));
+  cleanupKeys();
+  updateRecordUi();
+  updateJsonOutput();
+  setStatus("Enregistrement arrete: " + clip.keys.length + " keyframes.");
+}
+
+function savePoseKey() {
+  if (!model) return;
+  if (!clip.keys.length) {
+    clip.name = cleanName(dom.clipName.value || "Custom_Move");
+    clip.end = durationFrames();
+  }
+  const frame = clip.keys.length ? Math.min(clip.end, clip.keys[clip.keys.length - 1].frame + 6) : 1;
+  samplePose(frame);
+  cleanupKeys();
+  updateRecordUi();
+  updateJsonOutput();
+  setStatus("Pose sauvee: frame " + frame + ".");
+}
+
+function samplePose(frame) {
+  const key = { frame: Math.max(1, Math.round(frame)), bones: {}, locations: {} };
+  animatedBones().forEach(bone => {
+    const rot = rotationOffsetDegrees(bone);
+    const loc = locationOffset(bone);
+    key.bones[bone.name] = rot;
+    if (Math.abs(loc[0]) > 0.0001 || Math.abs(loc[1]) > 0.0001 || Math.abs(loc[2]) > 0.0001) {
+      key.locations[bone.name] = loc;
+    }
+  });
+  if (!Object.keys(key.locations).length) delete key.locations;
+
+  const existing = clip.keys.findIndex(item => item.frame === key.frame);
+  if (existing >= 0) clip.keys[existing] = key;
+  else clip.keys.push(key);
+  sortKeys();
+  lastRecordedFrame = key.frame;
+}
+
+function animatedBones() {
+  const set = new Set();
+  joints.forEach(joint => {
+    set.add(joint.endBone);
+    joint.chainBones.forEach(bone => set.add(bone));
+  });
+  return Array.from(set).filter(Boolean);
+}
+
+function rotationOffsetDegrees(bone) {
+  const rest = restRotations.get(bone.name) || new THREE.Euler();
+  return [
+    round(THREE.MathUtils.radToDeg(bone.rotation.x - rest.x), 3),
+    round(THREE.MathUtils.radToDeg(bone.rotation.y - rest.y), 3),
+    round(THREE.MathUtils.radToDeg(bone.rotation.z - rest.z), 3)
+  ];
+}
+
+function locationOffset(bone) {
+  const rest = restPositions.get(bone.name) || new THREE.Vector3();
+  return [
+    round(bone.position.x - rest.x, 4),
+    round(bone.position.y - rest.y, 4),
+    round(bone.position.z - rest.z, 4)
+  ];
+}
+
+function resetPose() {
+  bones.forEach(bone => {
+    const rot = restRotations.get(bone.name);
+    const pos = restPositions.get(bone.name);
+    if (rot) bone.rotation.copy(rot);
+    if (pos) bone.position.copy(pos);
+  });
+  updateJointsFromBones();
+}
+
+function togglePlayback() {
+  if (!clip.keys.length) return;
+  playing = !playing;
+  if (playing) {
+    playStartTime = performance.now();
+    dom.playButton.textContent = "Stop";
+  } else {
+    dom.playButton.textContent = "Lire";
+  }
+}
+
+function applyClipAtFrame(frame) {
+  resetPose();
+  const names = new Set();
+  clip.keys.forEach(key => {
+    Object.keys(key.bones || {}).forEach(name => names.add(name));
+    Object.keys(key.locations || {}).forEach(name => names.add(name));
+  });
+
+  names.forEach(name => {
+    const bone = bones.find(item => item.name === name);
+    if (!bone) return;
+    const rot = interpolatedValue(name, frame, "bones");
+    const loc = interpolatedValue(name, frame, "locations");
+    const restRot = restRotations.get(name);
+    const restPos = restPositions.get(name);
+    if (restRot && rot) {
+      bone.rotation.set(
+        restRot.x + THREE.MathUtils.degToRad(rot[0] || 0),
+        restRot.y + THREE.MathUtils.degToRad(rot[1] || 0),
+        restRot.z + THREE.MathUtils.degToRad(rot[2] || 0)
+      );
+    }
+    if (restPos && loc) {
+      bone.position.set(
+        restPos.x + (loc[0] || 0),
+        restPos.y + (loc[1] || 0),
+        restPos.z + (loc[2] || 0)
+      );
+    }
+  });
+  updateJointsFromBones();
+}
+
+function interpolatedValue(name, frame, type) {
+  const entries = clip.keys
+    .filter(key => key[type] && key[type][name])
+    .map(key => ({ frame: key.frame, value: key[type][name] }))
+    .sort((a, b) => a.frame - b.frame);
+  if (!entries.length) return null;
+  let prev = entries[0];
+  let next = entries[entries.length - 1];
+  for (const entry of entries) {
+    if (entry.frame <= frame) prev = entry;
+    if (entry.frame >= frame) {
+      next = entry;
+      break;
+    }
+  }
+  if (prev.frame === next.frame) return prev.value;
+  const t = (frame - prev.frame) / (next.frame - prev.frame);
+  return [0, 1, 2].map(index => THREE.MathUtils.lerp(prev.value[index] || 0, next.value[index] || 0, t));
+}
+
+function updateRecordUi() {
+  dom.recLamp.classList.toggle("on", recording);
+  dom.recordButton.disabled = recording;
+  dom.stopButton.disabled = !recording;
+  dom.recText.textContent = recording ? "REC frame " + Math.max(1, lastRecordedFrame) : "Pret";
+  renderKeyList();
+}
+
+function renderKeyList() {
+  dom.keyList.innerHTML = "";
+  if (!clip.keys.length) {
+    const empty = document.createElement("div");
+    empty.className = "help";
+    empty.textContent = "Aucune keyframe.";
+    dom.keyList.appendChild(empty);
+    return;
+  }
+  clip.keys.slice(-24).forEach(key => {
+    const item = document.createElement("div");
+    item.className = "key-item";
+    const count = Object.keys(key.bones || {}).length;
+    item.innerHTML = "<span class='key-frame'>F" + key.frame + "</span><span>" + count + " os enregistres</span>";
+    dom.keyList.appendChild(item);
+  });
+}
+
+function exportObject() {
+  const end = clip.keys.length ? Math.max(...clip.keys.map(key => key.frame), clip.end) : durationFrames();
+  return {
+    clips: [
+      {
+        name: cleanName(dom.clipName.value || clip.name || "Custom_Move"),
+        end,
+        loop: false,
+        space: "offset",
+        keys: clip.keys
+      }
+    ]
+  };
+}
+
+function updateJsonOutput() {
+  cleanupKeys();
+  dom.jsonOut.value = JSON.stringify(exportObject(), null, 2);
+  renderKeyList();
+}
+
+function downloadJson() {
+  updateJsonOutput();
+  const blob = new Blob([dom.jsonOut.value], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = cleanName(dom.clipName.value || "Custom_Move") + ".json";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyJson() {
+  updateJsonOutput();
+  try {
+    await navigator.clipboard.writeText(dom.jsonOut.value);
+    setStatus("JSON copie.");
+  } catch {
+    dom.jsonOut.select();
+    document.execCommand("copy");
+    setStatus("JSON copie via selection.");
+  }
+}
+
+function clearClip() {
+  clip.keys = [];
+  updateJsonOutput();
+  resetPose();
+  setStatus("Mouvement vide.");
+}
+
+function cleanupKeys() {
+  clip.keys = clip.keys.filter(key => key.bones && Object.keys(key.bones).length);
+  sortKeys();
+}
+
+function sortKeys() {
+  clip.keys.sort((a, b) => a.frame - b.frame);
+}
+
+function durationFrames() {
+  return Math.max(2, Math.round(Number(dom.durationInput.value || 3) * fps()));
+}
+
+function fps() {
+  return Math.max(6, Math.min(60, Number(dom.fpsInput.value || 24)));
+}
+
+function cleanName(value) {
+  return String(value || "Custom_Move").trim().replace(/\s+/g, "_").replace(/[^\w.-]/g, "_") || "Custom_Move";
+}
+
+function animate(now = performance.now()) {
+  requestAnimationFrame(animate);
+  const delta = Math.min(0.06, (now - lastAnimationTick) / 1000);
+  lastAnimationTick = now;
+
+  updateGamepad(delta);
+
+  if (recording) {
+    const elapsed = (now - recordStartTime) / 1000;
+    const frame = Math.min(durationFrames(), Math.max(1, Math.round(elapsed * fps()) + 1));
+    if (frame !== lastRecordedFrame) {
+      samplePose(frame);
+      updateRecordUi();
+    }
+    if (frame >= durationFrames()) stopRecording();
+  }
+
+  if (playing && clip.keys.length) {
+    const elapsed = (now - playStartTime) / 1000;
+    let frame = Math.round(elapsed * fps()) + 1;
+    const end = Math.max(...clip.keys.map(key => key.frame), 1);
+    if (frame > end) {
+      playing = false;
+      dom.playButton.textContent = "Lire";
+      frame = end;
+    }
+    applyClipAtFrame(frame);
+  }
+
+  controls.update();
+  updateLabels();
+  renderer.render(scene, camera);
+}
+
+function updateLabels() {
+  const rect = renderer.domElement.getBoundingClientRect();
+  joints.forEach(joint => {
+    const pos = joint.mesh.position.clone().project(camera);
+    const x = (pos.x * 0.5 + 0.5) * rect.width;
+    const y = (-pos.y * 0.5 + 0.5) * rect.height;
+    joint.label.style.left = x + "px";
+    joint.label.style.top = y + "px";
+    joint.label.style.display = showLabels && pos.z < 1 ? "block" : "none";
+  });
+}
+
+function setStatus(text) {
+  dom.status.textContent = text;
+}
+
+function round(value, decimals) {
+  const scale = 10 ** decimals;
+  return Math.round(value * scale) / scale;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<title>Trottinette 3D</title>
+<style>
+body { margin: 0; overflow: hidden; font-family: Arial; }
+
+#menu {
+  position: absolute;
+  width: 100%; height: 100%;
+  background: #111; color: white;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+
+button { padding: 15px; margin: 10px; font-size: 20px; }
+
+#hud {
+  position: absolute;
+  top: 10px; left: 10px;
+  color: white;
+}
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>Jeu Trottinette</h1>
+  <button onclick="start('scooter')">Jouer avec la trottinette</button>
+  <button onclick="start('mech')">Jouer avec le personnage</button>
+  <button onclick="start('car')">Jouer avec la voiture</button>
+  <button onclick="start('titan')">Jouer avec le bot anime</button>
+  <button onclick="start('pinstripe')">Jouer avec le Pinstripe Shadows</button>
+  <button onclick="start('chasseur')">Jouer avec l'avion chasseur</button>
+  <button onclick="start('wargun')">Jouer avec le Wargun</button>
+  <button onclick="start('fly')">Survoler la ville</button>
+  <button onclick="location.href='puppet_animation_editor.html'">Marionnette animation</button>
+</div>
+
+<div id="hud" style="display:none; position:absolute; top:12px; left:12px; background:rgba(0,0,0,0.55); color:white; font:14px monospace; padding:10px 16px; border-radius:8px; z-index:30; pointer-events:none; line-height:1.7;"></div>
+
+<script src="libs/three.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./libs/three.module.js",
+    "three/addons/": "./libs/"
+  }
+}
+</script>
+<script type="module">
+  import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
+  import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+  import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+  window.FBXLoader = FBXLoader;
+  window.GLTFLoader = GLTFLoader;
+  window.ThreeMFLoader = ThreeMFLoader;
+  window.STLLoader = STLLoader;
+  window.OBJLoader = OBJLoader;
+  window.dispatchEvent(new Event('fbxloaderready'));
+  window.dispatchEvent(new Event('gltfloaderready'));
+  window.dispatchEvent(new Event('threemfloaderready'));
+  window.dispatchEvent(new Event('stlloaderready'));
+  window.dispatchEvent(new Event('objloaderready'));
+</script>
+<script src="poilhes-game-map.js?v=poilhes-20260504"></script>
+<script src="chasseur.js?v=chasseur-20260609-thrust"></script>
+<script src="wargun.js?v=wargun-20260609fix"></script>
+<script src="rzphzel.js?v=unify-20260618-glbeditor"></script>
+<script src="combat.js?v=combat-20260609"></script>
+<script src="ulvheim.js?v=ulvheim-20260618b"></script>
+
+</body>
+</html>

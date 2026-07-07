@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<title>La Vallée du Château</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { display: flex; overflow: hidden; height: 100vh; background: #0a0f18; }
+body.no-editor #glb-panel { display: none; }
+
+#scene-wrap { position: relative; flex: 2; min-width: 0; }
+#scene-wrap canvas { display: block; width: 100% !important; height: 100% !important; }
+
+#info {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,0.5); font: 11px/1.6 Arial; text-align: center;
+  pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.9); white-space: nowrap;
+}
+#loading {
+  position: absolute; inset: 0; background: #0d1520;
+  display: flex; align-items: center; justify-content: center;
+  color: #8ab4d8; font: 16px Arial; letter-spacing: 2px; transition: opacity 0.8s; z-index: 10;
+}
+
+/* ── Boutons flottants ─────────────────────────────────────── */
+#ui-btns {
+  position: absolute; top: 14px; left: 14px; z-index: 20;
+  display: flex; gap: 8px;
+}
+.ui-btn {
+  padding: 8px 14px; border-radius: 6px; cursor: pointer;
+  font: 12px/1 Arial; letter-spacing: 0.5px;
+  background: rgba(10,15,24,0.72); border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.75); transition: all .15s;
+  backdrop-filter: blur(6px);
+}
+.ui-btn:hover { background: rgba(30,50,80,0.85); color: #fff; border-color: rgba(255,255,255,0.4); }
+#btn-editor.on { color: #00d4ff; border-color: #00d4ff; background: rgba(0,80,120,0.5); }
+#btn-play   { color: #a0e870; border-color: rgba(160,232,112,0.4); }
+#btn-play:hover { border-color: #a0e870; }
+#btn-stop   { display:none; color:#f88; border-color:rgba(255,136,136,0.5); }
+#btn-stop:hover { border-color:#f88; background:rgba(80,20,20,0.7); }
+
+/* ── Overlay sélecteur de véhicule ───────────────────────── */
+#play-overlay {
+  display: none; position: absolute; inset: 0; z-index: 30;
+  background: rgba(0,0,0,0.75); align-items: center; justify-content: center;
+}
+#play-overlay.vis { display: flex; }
+#play-modal {
+  background: #0d1824; border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px; padding: 28px 32px; text-align: center; min-width: 260px;
+}
+#play-modal h2 { color: #9bc4e8; font: 700 14px Arial; letter-spacing: 1px; margin-bottom: 20px; }
+.vcard {
+  padding: 14px 20px; margin: 8px 0; border-radius: 8px; cursor: pointer;
+  background: rgba(255,255,255,0.06); border: 2px solid transparent;
+  color: #cdd8e8; font: 13px Arial; transition: all .15s;
+}
+.vcard:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.3); }
+.vcard.chasseur:hover { border-color: #00d4ff; color: #00d4ff; }
+.vcard.wargun:hover   { border-color: #ffaa44; color: #ffaa44; }
+.vcard.libre:hover    { border-color: #a0e870; color: #a0e870; }
+.vcard.cancel         { color: rgba(255,255,255,0.35); font-size: 11px; margin-top: 16px; }
+.vcard.cancel:hover   { color: #f88; border-color: transparent; background: none; }
+
+/* ── HUD vol ─────────────────────────────────────────────── */
+#hud {
+  display: none; position: absolute; bottom: 18px; left: 18px;
+  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px; padding: 12px 16px; color: rgba(255,255,255,0.7);
+  font: 11px/1.8 monospace; pointer-events: none; backdrop-filter: blur(4px);
+}
+#hud.vis { display: block; }
+#hud-name  { color: #00d4ff; font-weight: 700; margin-bottom: 4px; }
+#hud-speed { color: #a0e870; font-size: 13px; font-weight: 700; }
+#hud-alt   { color: #ffcc66; }
+#hud-keys  { margin-top: 6px; color: rgba(255,255,255,0.35); font-size: 10px; line-height: 1.6; }
+
+/* ── Overlay test manette ────────────────────────────────── */
+#gp-overlay {
+  display: none; position: absolute; top: 60px; left: 14px; z-index: 25;
+  background: rgba(8,14,24,0.92); border: 1px solid rgba(160,232,112,0.35);
+  border-radius: 10px; padding: 14px 16px; width: 320px;
+  font: 11px/1.5 monospace; color: #cdd8e8;
+  backdrop-filter: blur(6px);
+}
+#gp-overlay.vis { display: block; }
+#gp-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+#gp-name { color:#a0e870; font-weight:700; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px; }
+#gp-nav { display:flex; gap:4px; }
+#gp-nav button { background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2); color:#fff; border-radius:4px; padding:2px 7px; cursor:pointer; font:11px monospace; }
+#gp-nav button:hover { background:rgba(255,255,255,.2); }
+#gp-axes { margin-bottom:10px; }
+.gp-axis { display:flex; align-items:center; gap:6px; margin:3px 0; font-size:10px; }
+.gp-axis-label { width:50px; color:rgba(255,255,255,.5); }
+.gp-axis-bar-bg { flex:1; height:6px; background:rgba(255,255,255,.1); border-radius:3px; position:relative; }
+.gp-axis-fill { height:100%; border-radius:3px; position:absolute; background:#00d4ff; transition:none; }
+.gp-axis-val { width:36px; text-align:right; color:#00d4ff; }
+#gp-btns { display:flex; flex-wrap:wrap; gap:5px; }
+.gp-btn {
+  width:36px; height:28px; border-radius:5px; display:flex; align-items:center; justify-content:center;
+  font-size:9px; font-weight:700; border:1px solid rgba(255,255,255,.18);
+  background:rgba(255,255,255,.05); color:rgba(255,255,255,.35); transition:none;
+}
+.gp-btn.pressed { background:rgba(160,232,112,.3); border-color:#a0e870; color:#a0e870; }
+.gp-btn.analog  { background:rgba(0,212,255,.2); border-color:#00d4ff; color:#00d4ff; }
+
+/* ── Panneau éditeur ──────────────────────────────────────── */
+#glb-panel {
+  flex: 0 0 33.333%; height: 100vh; overflow-y: auto;
+  background: #0d1520; border-left: 1px solid rgba(255,255,255,0.1);
+  color: #cdd8e8; font: 12px/1.5 Arial;
+  display: flex; flex-direction: column; user-select: none;
+}
+#glb-panel h1 {
+  font-size: 13px; font-weight: 700; letter-spacing: 1px;
+  padding: 14px 14px 8px; color: #9bc4e8;
+  border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;
+}
+.tab-bar { display: flex; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
+.tab-btn {
+  flex: 1; padding: 8px 4px; font: 11px Arial; letter-spacing: 0.5px;
+  background: none; border: none; color: rgba(255,255,255,0.45); cursor: pointer;
+  border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+}
+.tab-btn.active { color: #00d4ff; border-bottom-color: #00d4ff; }
+.tab-btn:hover:not(.active) { color: rgba(255,255,255,0.7); }
+#glb-gallery {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 8px; padding: 12px; flex: 1; align-content: start; min-height: 0;
+}
+.glb-thumb {
+  display: flex; flex-direction: column; align-items: center;
+  cursor: pointer; border-radius: 7px; padding: 5px;
+  background: rgba(255,255,255,0.05); border: 2px solid transparent;
+  transition: border-color .12s, background .12s;
+}
+.glb-thumb:hover { background: rgba(255,255,255,0.10); }
+.glb-thumb.selected { border-color: #00d4ff; background: rgba(0,212,255,0.10); }
+.glb-thumb canvas { width: 100%; aspect-ratio: 1; border-radius: 5px; display: block; }
+.glb-thumb-lbl {
+  font-size: 9px; color: rgba(255,255,255,0.6); text-align: center;
+  margin-top: 4px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#glb-controls { padding: 12px; border-top: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
+#glb-controls label { display: block; margin: 7px 0; font-size: 11px; color: rgba(255,255,255,0.65); }
+#glb-controls input {
+  width: 100%; margin-top: 3px; background: rgba(255,255,255,0.10);
+  border: 0; border-radius: 5px; padding: 6px 8px; color: #fff; font: inherit;
+}
+#place-status {
+  padding: 10px 14px; font-size: 11px; color: #6bc8ff;
+  border-top: 1px solid rgba(255,255,255,0.08); min-height: 36px; flex-shrink: 0;
+}
+#placed-list { padding: 0 14px 12px; flex-shrink: 0; }
+#placed-list h2 { font-size: 11px; color: #9bc4e8; margin: 8px 0 6px; }
+.placed-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 10px; color: rgba(255,255,255,0.55); padding: 3px 6px;
+  background: rgba(255,255,255,0.04); border-radius: 4px; margin-bottom: 3px;
+}
+.placed-row button { background: none; border: none; color: #f88; cursor: pointer; font-size: 12px; padding: 0 2px; }
+</style>
+</head>
+<body>
+
+<div id="scene-wrap">
+  <div id="loading">Génération du terrain…</div>
+  <div id="info">Tourner · Scroll : zoom · Clic droit : pan · Clic gauche sur terrain : poser</div>
+
+  <!-- Boutons flottants -->
+  <div id="ui-btns">
+    <button class="ui-btn" id="btn-editor">🗺 Éditeur</button>
+    <button class="ui-btn" id="btn-play">▶ Voler</button>
+    <button class="ui-btn" id="btn-stop">✖ Stop</button>
+    <button class="ui-btn" id="btn-gp">🎮 Manette</button>
+  </div>
+
+  <!-- Overlay test manette -->
+  <div id="gp-overlay">
+    <div id="gp-header">
+      <span id="gp-name">Aucune manette détectée</span>
+      <span id="gp-nav"></span>
+    </div>
+    <div id="gp-axes-wrap"><div id="gp-axes"></div></div>
+    <div id="gp-btns-wrap"><div id="gp-btns"></div></div>
+  </div>
+
+  <!-- Sélecteur de véhicule -->
+  <div id="play-overlay">
+    <div id="play-modal">
+      <h2>MODE DE VOL</h2>
+      <div class="vcard chasseur" data-v="chasseur">🛩 Chasseur</div>
+      <div class="vcard wargun"   data-v="wargun">✈ Wargun</div>
+      <div class="vcard libre"    data-v="libre">🎥 Caméra libre</div>
+      <div class="vcard cancel"   data-v="cancel">Annuler</div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hud-name">Chasseur</div>
+    <div id="hud-speed">0 km/h</div>
+    <div id="hud-alt">Alt : 0 m</div>
+    <div id="hud-keys"></div>
+    <div id="hud-ammo" style="margin-top:4px;color:#ff9944;font-size:12px;font-weight:700;">🚀 ×4</div>
+    <div id="hud-gp" style="margin-top:5px;color:#a0e870;font-size:10px;"></div>
+  </div>
+</div>
+
+<div id="glb-panel">
+  <h1>⚔ ÉDITEUR DE MAP</h1>
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="ruins">Ruines</button>
+    <button class="tab-btn" data-tab="objects">Objets</button>
+    <button class="tab-btn" data-tab="characters">Persos</button>
+  </div>
+  <div id="glb-gallery"></div>
+  <div id="glb-controls">
+    <label>Échelle<input id="glb-scale" type="number" value="0.09" min="0.001" max="10" step="0.005"></label>
+    <label>Rotation Y (degrés)<input id="glb-rot" type="number" value="0" min="-180" max="180" step="5"></label>
+  </div>
+  <div id="place-status">Sélectionne un objet puis clique sur la map.</div>
+  <div id="placed-list"><h2>Objets posés</h2></div>
+</div>
+
+<script>
+window.onerror = (m,s,l) => { const p=document.getElementById('place-status'); if(p) p.style.color='#f88', p.textContent='ERREUR: '+m+' ('+l+')'; };
+window.addEventListener('unhandledrejection', e => { const p=document.getElementById('place-status'); if(p) p.style.color='#f88', p.textContent='REJECT: '+(e.reason?.message||e.reason); });
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./libs/three.module.js",
+    "three/addons/": "./libs/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE         from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader }    from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader }     from 'three/addons/loaders/OBJLoader.js';
+
+// ── Renderer ───────────────────────────────────────────────────────────────
+const sceneWrap = document.getElementById('scene-wrap');
+function canvasW() { return sceneWrap.clientWidth  || Math.floor(innerWidth*2/3); }
+function canvasH() { return sceneWrap.clientHeight || innerHeight; }
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(canvasW(), canvasH());
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+renderer.toneMapping       = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+sceneWrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog   = new THREE.FogExp2(0xb8d4e8, 0.0006);
+
+const camera = new THREE.PerspectiveCamera(52, canvasW()/canvasH(), 1, 3500);
+camera.position.set(380, 280, 520);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 20, 0);
+controls.maxPolarAngle = Math.PI * 0.47;
+controls.minDistance   = 30;
+controls.maxDistance   = 2000;
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.update();
+
+// ── Lumières ──────────────────────────────────────────────────────────────
+scene.add(new THREE.HemisphereLight(0xadd8f0, 0x4d7040, 0.75));
+const sun = new THREE.DirectionalLight(0xfffbe8, 2.2);
+sun.position.set(-400, 650, 300); sun.castShadow = true;
+sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.camera.near=-1; sun.shadow.camera.far=2400;
+sun.shadow.camera.left=-850; sun.shadow.camera.right=850;
+sun.shadow.camera.top=850; sun.shadow.camera.bottom=-850;
+sun.shadow.bias=-0.0004; scene.add(sun);
+const fill = new THREE.DirectionalLight(0xb8d0ff, 0.35);
+fill.position.set(320, 200, -300); scene.add(fill);
+
+// ── Skybox ────────────────────────────────────────────────────────────────
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(2500,24,12), new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  uniforms: { topColor:{value:new THREE.Color(0x2a5f8f)}, horizColor:{value:new THREE.Color(0x9ec8e8)}, horizonAlt:{value:0.10} },
+  vertexShader:   `varying vec3 vW; void main(){ vW=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `uniform vec3 topColor,horizColor; uniform float horizonAlt; varying vec3 vW;
+    void main(){ float t=clamp((normalize(vW).y-horizonAlt)/(1.-horizonAlt),0.,1.); gl_FragColor=vec4(mix(horizColor,topColor,pow(t,.6)),1.); }`,
+})));
+
+// ── Terrain 1400×1400 ────────────────────────────────────────────────────
+const MAP_W=1400, MAP_D=1400, SEGS=240;
+const CASTLE_X=150, CASTLE_Z=-125;
+
+function h(x,z){
+  const nx=x/(MAP_W*.5), nz=z/(MAP_D*.5);
+  const bX=Math.pow(Math.max(0,(Math.abs(nx)-.80)/.20),2.0)*220;
+  const bZ=Math.pow(Math.max(0,(Math.abs(nz)-.82)/.18),2.5)*200;
+  const eastMtns=Math.pow(Math.max(0,(nx-.28)/.72),1.7)*230;
+  const westHills=Math.pow(Math.max(0,(-nx-.12)/.88),2.8)*85;
+  const northBase=Math.pow(Math.max(0,(-nz-.38)/.62),1.9)*175;
+  const fjordDepth=95*Math.exp(-((x+200)*(x+200))/9000)*Math.max(0,(-nz-.25)/.75);
+  const northMass=Math.max(0,northBase-fjordDepth);
+  const southEdge=Math.pow(Math.max(0,(nz-.62)/.38),3.2)*70;
+  const nePlateau=50*Math.exp(-((nx-.48)*(nx-.48)*5+(nz+.48)*(nz+.48)*5));
+  const centralV=-28*Math.exp(-(nx*nx*3.0+(nz+.08)*(nz+.08)*2.2));
+  const nwValley=-20*Math.exp(-((nx+.38)*(nx+.38)*7+(nz+.32)*(nz+.32)*7));
+  const swBasin=-15*Math.exp(-((nx+.40)*(nx+.40)*6+(nz-.42)*(nz-.42)*6));
+  const midEastV=-18*Math.exp(-((nx-.22)*(nx-.22)*10+(nz-.15)*(nz-.15)*8));
+  const r1=Math.sin(x*.0060+1.30)*22, r2=Math.sin(z*.0052-.55)*17;
+  const r3=Math.sin(x*.012+z*.010)*10, r4=Math.sin(x*.020-z*.016)*6;
+  const r5=Math.sin(x*.0042+z*.0038+2.1)*28, r6=Math.sin(x*.0085-z*.0072-1.4)*13;
+  const r7=Math.sin(x*.025+z*.022+.7)*5, r8=Math.sin(x*.016-z*.013+3.5)*8;
+  const castle=30*Math.exp(-((x-CASTLE_X)*(x-CASTLE_X)*.00028+(z-CASTLE_Z)*(z-CASTLE_Z)*.00035));
+  const spur=55*Math.exp(-((x-320)*(x-320)*.00012+(z+240)*(z+240)*.00015));
+  return Math.max(-10,bX+bZ+eastMtns+westHills+northMass+southEdge+nePlateau+centralV+nwValley+swBasin+midEastV+r1+r2+r3+r4+r5+r6+r7+r8+castle+spur);
+}
+const hCache=new Map();
+function getH(x,z){ const k=`${Math.round(x)},${Math.round(z)}`; if(!hCache.has(k))hCache.set(k,h(x,z)); return hCache.get(k); }
+
+const geo=new THREE.PlaneGeometry(MAP_W,MAP_D,SEGS,SEGS);
+geo.rotateX(-Math.PI/2);
+const pos=geo.attributes.position, col=new Float32Array(pos.count*3);
+for(let i=0;i<pos.count;i++) pos.setY(i,h(pos.getX(i),pos.getZ(i)));
+pos.needsUpdate=true; geo.computeVertexNormals();
+const nor=geo.attributes.normal;
+for(let i=0;i<pos.count;i++){
+  const y=pos.getY(i),ny=nor.getY(i); let r,g,b;
+  if(y<0){[r,g,b]=[.22,.38,.52];}
+  else if(y<4){[r,g,b]=[.27,.52,.20];}
+  else if(y<22){const t=(y-4)/18; r=.27+t*.14;g=.52-t*.04;b=.20-t*.03;}
+  else if(y<58){const t=(y-22)/36; r=.41+t*.22;g=.48-t*.22;b=.17-t*.06;}
+  else if(y<105){const t=(y-58)/47; r=.50+t*.14;g=.33-t*.06;b=.13;}
+  else if(y<145){const t=(y-105)/40; r=.52+t*.24;g=.30+t*.24;b=.14+t*.28;}
+  else{const j=(Math.sin(i*137.3)*.5+.5)*.06; r=.86+j;g=.89+j;b=.96;}
+  const s=.58+ny*.42; col[i*3]=r*s;col[i*3+1]=g*s;col[i*3+2]=b*s;
+}
+geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+const terrain=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.92,metalness:0}));
+terrain.receiveShadow=true; scene.add(terrain);
+requestAnimationFrame(()=>{ const ov=document.getElementById('loading'); if(ov){ov.style.opacity='0';setTimeout(()=>ov.remove(),700);} });
+
+// ── Eau ───────────────────────────────────────────────────────────────────
+const waterMesh=new THREE.Mesh(new THREE.PlaneGeometry(MAP_W,MAP_D),
+  new THREE.MeshStandardMaterial({color:0x2278a8,roughness:.05,metalness:.15,transparent:true,opacity:.78}));
+waterMesh.rotation.x=-Math.PI/2; waterMesh.position.y=1.2; scene.add(waterMesh);
+
+// ── Arbres ────────────────────────────────────────────────────────────────
+const TREE_COUNT=1800, dummy=new THREE.Object3D();
+const iTrunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(.28,.45,1,7),new THREE.MeshStandardMaterial({color:0x5a3318,roughness:.95}),TREE_COUNT);
+const iCone1=new THREE.InstancedMesh(new THREE.ConeGeometry(1,1,7),           new THREE.MeshStandardMaterial({color:0x28501a,roughness:.90}),TREE_COUNT);
+const iCone2=new THREE.InstancedMesh(new THREE.ConeGeometry(.75,1,7),         new THREE.MeshStandardMaterial({color:0x336b22,roughness:.88}),TREE_COUNT);
+[iTrunk,iCone1,iCone2].forEach(m=>{m.castShadow=true;m.receiveShadow=true;});
+let rngS=12345; const rng=()=>{rngS=(rngS*1664525+1013904223)&0xffffffff;return(rngS>>>0)/0xffffffff;};
+let ti=0,att=0;
+while(ti<TREE_COUNT&&att<TREE_COUNT*12){
+  att++; const x=(rng()-.5)*MAP_W*.88,z=(rng()-.5)*MAP_D*.88,y=getH(x,z);
+  if(y<3||y>130)continue; if(y<12&&rng()>.18)continue; if(y>100&&rng()>.12)continue;
+  if(Math.abs(x-CASTLE_X)<40&&Math.abs(z-CASTLE_Z)<40)continue;
+  const tH=5+rng()*7,tR=1.8+rng()*1.6,ry=rng()*Math.PI*2;
+  dummy.position.set(x,y+tH*.20,z);dummy.rotation.set(0,ry,0);dummy.scale.set(1,tH*.38,1);dummy.updateMatrix();iTrunk.setMatrixAt(ti,dummy.matrix);
+  dummy.position.set(x,y+tH*.42,z);dummy.scale.set(tR,tH*.48,tR);dummy.updateMatrix();iCone1.setMatrixAt(ti,dummy.matrix);
+  dummy.position.set(x,y+tH*.72,z);dummy.scale.set(tR*.65,tH*.38,tR*.65);dummy.updateMatrix();iCone2.setMatrixAt(ti,dummy.matrix);
+  ti++;
+}
+[iTrunk,iCone1,iCone2].forEach(m=>{m.instanceMatrix.needsUpdate=true;scene.add(m);});
+
+// ── Nuages ────────────────────────────────────────────────────────────────
+const cloudMat=new THREE.MeshStandardMaterial({color:0xfafcff,transparent:true,opacity:.82,roughness:1.0});
+function spawnCloud(x,y,z,s){const g=new THREE.Group();[[0,0,0,1],[1.2,.15,.2,.80],[-1.1,.1,-.15,.78],[.3,.28,-1,.70],[.1,.22,.9,.72]].forEach(([dx,dy,dz,f])=>{const m=new THREE.Mesh(new THREE.SphereGeometry(s*f,9,6),cloudMat);m.position.set(dx*s,dy*s,dz*s);m.scale.y=.42;g.add(m);});g.position.set(x,y,z);scene.add(g);}
+[[-280,400,-220,58],[240,420,-380,68],[440,370,180,50],[-400,410,300,62],[90,400,400,55],[-160,430,-460,52],[300,380,-110,44],[-480,370,140,60],[120,440,-280,48],[370,410,320,52],[-220,395,220,40],[60,370,120,32],[-350,420,-80,45],[200,360,240,36]].forEach(c=>spawnCloud(...c));
+
+// ── Château pré-placé ─────────────────────────────────────────────────────
+const stoneMat=new THREE.MeshStandardMaterial({color:0x9a8a78,roughness:.87,metalness:.04});
+const ruinMat =new THREE.MeshStandardMaterial({color:0x6a5c4a,roughness:.95,metalness:.02});
+[
+  {file:'assets/Ulvheim/ulvheim-A-1.glb',       sc:.12,dx:0,  dz:0,  ry:.5, ruin:false},
+  {file:'assets/Ulvheim/ulvheim-A-2.glb',       sc:.11,dx:16, dz:7,  ry:1.2,ruin:false},
+  {file:'assets/Ulvheim/ulvheim-A-1-ruin1.glb', sc:.10,dx:-12,dz:9,  ry:2.4,ruin:true },
+  {file:'assets/Ulvheim/ulvheim-A-1-ruin3.glb', sc:.09,dx:10, dz:-11,ry:-.7,ruin:true },
+  {file:'assets/Ulvheim/ulvheim-A-2-ruin2A.glb',sc:.09,dx:-8, dz:-10,ry:1.9,ruin:true },
+  {file:'assets/Ulvheim/ulvheim-A-1-ruin5.glb', sc:.08,dx:18, dz:-5, ry:-1.3,ruin:true},
+  {file:'assets/Ulvheim/ulvheim-A-2-ruin1A.glb',sc:.09,dx:-18,dz:-4, ry:.8, ruin:true },
+].forEach(({file,sc,dx,dz,ry,ruin})=>{
+  new GLTFLoader().load(file,gltf=>{
+    const root=gltf.scene; root.rotation.x=-Math.PI/2; root.scale.setScalar(sc); root.rotation.y=ry;
+    root.updateMatrixWorld(true);
+    const box=new THREE.Box3().setFromObject(root), px=CASTLE_X+dx, pz=CASTLE_Z+dz, py=getH(px,pz);
+    root.position.set(px-(box.min.x+box.max.x)/2,py-box.min.y,pz-(box.min.z+box.max.z)/2);
+    root.traverse(n=>{if(!n.isMesh)return;n.castShadow=true;n.receiveShadow=true;n.material=ruin?ruinMat:stoneMat;});
+    scene.add(root);
+  });
+});
+
+// ── Catalogue de modèles ──────────────────────────────────────────────────
+const DEFS={
+  ruins:[
+    {file:'assets/Ulvheim/ulvheim-A-1-ruin1.glb',label:'A1·R1',flip:true,mat:'ruin', defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-1-ruin2.glb',label:'A1·R2',flip:true,mat:'ruin', defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-1-ruin3.glb',label:'A1·R3',flip:true,mat:'ruin', defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-1-ruin4.glb',label:'A1·R4',flip:true,mat:'ruin', defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-1-ruin5.glb',label:'A1·R5',flip:true,mat:'ruin', defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-1.glb',      label:'Château 1',flip:true,mat:'stone',defScale:.12},
+    {file:'assets/Ulvheim/ulvheim-A-2-ruin1A.glb',label:'A2·1A',flip:true,mat:'ruin',defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-2-ruin1B.glb',label:'A2·1B',flip:true,mat:'ruin',defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-2-ruin2A.glb',label:'A2·2A',flip:true,mat:'ruin',defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-2-ruin2B.glb',label:'A2·2B',flip:true,mat:'ruin',defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-2-ruin3A.glb',label:'A2·3A',flip:true,mat:'ruin',defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-2-ruin3B.glb',label:'A2·3B',flip:true,mat:'ruin',defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-2-ruin5.glb', label:'A2·R5',flip:true,mat:'ruin',defScale:.09},
+    {file:'assets/Ulvheim/ulvheim-A-2.glb',       label:'Château 2',flip:true,mat:'stone',defScale:.11},
+  ],
+  objects:[
+    {file:'assets/Motocross/Motocross.glb',                label:'Motocross',flip:false,mat:null,defScale:.08},
+    {file:'assets/lasvegas_allegiant.glb',                 label:'Las Vegas',flip:false,mat:null,defScale:.003},
+    {file:'assets/Cartoon_road/Free_cartoon_road_obj.obj', label:'Route',    flip:false,mat:null,defScale:.05},
+  ],
+  characters:[
+    {file:'perso/chasseur.obj',label:'Chasseur',flip:false,texture:null,defScale:.015,rotY0:-Math.PI/2},
+    {file:'perso/chasseur.obj',label:'Wargun',  flip:false,texture:null,defScale:.015,rotY0:-Math.PI/2},
+    {file:'perso/Meshy_AI_Azure_Titan_biped/Meshy_AI_Azure_Titan_biped_Meshy_AI_Meshy_Merged_Animations.glb',label:'Azure Titan',flip:false,mat:null,defScale:.015},
+    {file:'perso/Meshy_AI_Pinstripe_Shadows/Meshy_AI_Pinstripe_Shadows_rigged_animations.glb',label:'Pinstripe',flip:false,mat:null,defScale:.015},
+  ],
+};
+
+// ── Loaders / cache ───────────────────────────────────────────────────────
+const modelCache={}, texCache={};
+function getTex(path){ if(!texCache[path]){texCache[path]=new THREE.TextureLoader().load(path);texCache[path].flipY=false;} return texCache[path]; }
+function loadModel(def,cb){
+  if(modelCache[def.file]){cb(modelCache[def.file]);return;}
+  const ext=def.file.split('.').pop().toLowerCase(), done=obj=>{modelCache[def.file]=obj;cb(obj);};
+  if(ext==='glb'||ext==='gltf') new GLTFLoader().load(def.file,g=>done(g.scene),undefined,()=>cb(null));
+  else if(ext==='obj')          new OBJLoader().load(def.file,done,undefined,()=>cb(null));
+  else cb(null);
+}
+function applyMat(def,node){
+  if(!node.isMesh)return; node.castShadow=true; node.receiveShadow=true;
+  if(def.mat==='ruin') {node.material=ruinMat;return;}
+  if(def.mat==='stone'){node.material=stoneMat;return;}
+  if(def.texture) node.material=new THREE.MeshStandardMaterial({map:getTex(def.texture),roughness:.65,metalness:.1});
+}
+
+// ── Thumbnail renderer ────────────────────────────────────────────────────
+const THUMB=90;
+const tR=new THREE.WebGLRenderer({antialias:true,alpha:true}); tR.setSize(THUMB,THUMB); tR.setPixelRatio(1);
+const tScene=new THREE.Scene(); tScene.background=new THREE.Color(0x141e2e);
+tScene.add(new THREE.AmbientLight(0xffffff,.65));
+const tSun=new THREE.DirectionalLight(0xfff4e0,1.6); tSun.position.set(1,2,1.5); tScene.add(tSun);
+const tFill=new THREE.DirectionalLight(0x88aaff,.35); tFill.position.set(-1,.5,-1); tScene.add(tFill);
+const tCam=new THREE.PerspectiveCamera(40,1,.01,10000);
+let tRoot=null; const thumbQueue=[]; let thumbBusy=false;
+
+function renderThumb(def,src,canvas){
+  if(tRoot){tScene.remove(tRoot);tRoot=null;}
+  const root=src.clone(true);
+  if(def.flip)root.rotation.x=-Math.PI/2;
+  root.traverse(n=>{if(!n.isMesh)return;if(def.mat==='ruin')n.material=ruinMat.clone();else if(def.mat==='stone')n.material=stoneMat.clone();else if(def.texture)n.material=new THREE.MeshStandardMaterial({map:getTex(def.texture),roughness:.65});});
+  root.updateMatrixWorld(true);
+  const box=new THREE.Box3().setFromObject(root),c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),d=Math.max(sz.x,sz.y,sz.z)||1;
+  root.position.sub(c); tScene.add(root); tRoot=root;
+  tCam.position.set(d*.72,d*.65,d*.72); tCam.lookAt(0,0,0); tCam.near=d*.01; tCam.far=d*10; tCam.updateProjectionMatrix();
+  tR.render(tScene,tCam); canvas.getContext('2d').drawImage(tR.domElement,0,0,THUMB,THUMB);
+}
+function processQueue(){
+  if(thumbBusy||!thumbQueue.length)return;
+  const {def,canvas}=thumbQueue.shift(); thumbBusy=true;
+  loadModel(def,src=>{if(src)renderThumb(def,src,canvas);thumbBusy=false;processQueue();});
+}
+
+// ── Galerie ───────────────────────────────────────────────────────────────
+const gallery=document.getElementById('glb-gallery'), scaleInp=document.getElementById('glb-scale');
+const rotInp=document.getElementById('glb-rot'), statusEl=document.getElementById('place-status');
+const placedDiv=document.getElementById('placed-list');
+let selectedDef=null, placeCounter=0;
+
+function buildGallery(tab){
+  gallery.innerHTML=''; selectedDef=null;
+  statusEl.style.color='#6bc8ff'; statusEl.textContent='Sélectionne un objet puis clique sur la map.';
+  DEFS[tab].forEach(def=>{
+    const item=document.createElement('div'); item.className='glb-thumb'; item.title=def.label;
+    const cv=document.createElement('canvas'); cv.width=cv.height=THUMB;
+    const ctx=cv.getContext('2d'); ctx.fillStyle='#141e2e'; ctx.fillRect(0,0,THUMB,THUMB);
+    ctx.fillStyle='rgba(255,255,255,0.2)'; ctx.font='11px Arial'; ctx.textAlign='center'; ctx.fillText('…',THUMB/2,THUMB/2+4);
+    const lbl=document.createElement('div'); lbl.className='glb-thumb-lbl'; lbl.textContent=def.label;
+    item.appendChild(cv); item.appendChild(lbl); gallery.appendChild(item);
+    item.addEventListener('click',()=>{
+      selectedDef=def; scaleInp.value=def.defScale;
+      gallery.querySelectorAll('.glb-thumb').forEach(el=>el.classList.remove('selected'));
+      item.classList.add('selected');
+      statusEl.style.color='#6bc8ff'; statusEl.textContent='✓ '+def.label+' — clique sur la map pour poser';
+    });
+    thumbQueue.push({def,canvas:cv}); processQueue();
+  });
+}
+document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); buildGallery(btn.dataset.tab);
+}));
+buildGallery('ruins');
+
+// ── Placement ────────────────────────────────────────────────────────────
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
+renderer.domElement.addEventListener('click',e=>{
+  if(gameMode||!selectedDef)return;
+  const rect=renderer.domElement.getBoundingClientRect();
+  mouse.x=((e.clientX-rect.left)/rect.width)*2-1;
+  mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+  ray.setFromCamera(mouse,camera);
+  const hits=ray.intersectObject(terrain,false); if(!hits.length)return;
+  const pt=hits[0].point, def=selectedDef, sc=parseFloat(scaleInp.value)||def.defScale, ry=(parseFloat(rotInp.value)||0)*Math.PI/180;
+  statusEl.textContent='Chargement '+def.label+'…';
+  loadModel(def,src=>{
+    if(!src){statusEl.style.color='#f88';statusEl.textContent='Erreur: '+def.label;return;}
+    const root=src.clone(true);
+    if(def.flip)root.rotation.x=-Math.PI/2;
+    root.rotation.y=(def.rotY0||0)+ry; root.scale.setScalar(sc);
+    root.updateMatrixWorld(true);
+    const box=new THREE.Box3().setFromObject(root), py=getH(pt.x,pt.z);
+    root.position.set(pt.x-(box.min.x+box.max.x)/2,py-box.min.y,pt.z-(box.min.z+box.max.z)/2);
+    root.traverse(n=>applyMat(def,n)); scene.add(root);
+    const id=++placeCounter;
+    const row=document.createElement('div'); row.className='placed-row';
+    row.innerHTML=`<span>#${id} ${def.label}</span><button title="Supprimer">✕</button>`;
+    row.querySelector('button').addEventListener('click',()=>{scene.remove(root);row.remove();});
+    placedDiv.appendChild(row);
+    statusEl.style.color='#6bc8ff'; statusEl.textContent='✓ '+def.label+' posé (#'+id+')';
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── MODE VOL ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+let gameMode=false, flightType='', playerMesh=null;
+
+// Constantes identiques au jeu principal
+const FLIGHT_MAX_SPEED   = 72;
+const FLIGHT_CRUISE_SPEED= 22;
+const FLIGHT_ACCEL_RATE  = 2.7;
+const FLIGHT_YAW_RATE    = 1.55;
+const FLIGHT_PITCH_RATE  = 0.95;
+const FLIGHT_MIN_ALT     = 7;
+const FLIGHT_MAX_ALT     = 520;   // plus haut que les montagnes (230u)
+
+// État de vol
+let flightSpeed=0, flightPitch=0, playerYaw=0;
+let gpCamDistMult=1.0;  // zoom manette L3/R3
+
+// ── État armes ────────────────────────────────────────────────────────────
+const BULLET_SPEED=350, BULLET_LIFE=1.1, GUN_RATE=.052;
+let gunCooldown=0;
+const bullets=[];
+const MAX_MISSILES=4; let missileAmmo=MAX_MISSILES;
+const missiles=[], explosions=[];
+let prevBtnB=false, prevKeyG=false;
+const wingMissiles=[];  // meshes statiques accrochés sous les ailes
+
+// État caméra libre
+const FC={ yaw:0, pitch:0, speed:0, drag:.90 };
+
+// Clavier
+const keys={};
+window.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  keys[e.code]=true;
+  if(e.code==='Escape') exitPlayMode();
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup',e=>{ keys[e.code]=false; });
+
+// ── Manette ───────────────────────────────────────────────────────────────
+let gamepadIndex=null;
+window.addEventListener('gamepadconnected',   e=>{ if(gamepadIndex===null) gamepadIndex=e.gamepad.index; updateGamepadStatus(); });
+window.addEventListener('gamepaddisconnected',e=>{ if(gamepadIndex===e.gamepad.index){ gamepadIndex=null; updateGamepadStatus(); } });
+
+function getGamepad(){
+  if(gamepadIndex===null)return null;
+  const gp=(navigator.getGamepads&&navigator.getGamepads())||[];
+  return gp[gamepadIndex]||null;
+}
+function readAxis(gp,i,dead=.08){ const v=gp.axes[i]||0; return Math.abs(v)<dead?0:v; }
+function readBtn(gp,i){ return gp.buttons[i]?gp.buttons[i].value||0:0; }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+function updateGamepadStatus(){
+  const el=document.getElementById('hud-gp');
+  if(!el)return;
+  if(gamepadIndex===null){ el.textContent=''; return; }
+  const gp=(navigator.getGamepads&&navigator.getGamepads())||[];
+  const g=gp[gamepadIndex];
+  el.textContent=g?'🎮 '+(g.id.slice(0,32)):'';
+}
+
+// Mémorise caméra avant vol
+let savedCamPos=null, savedCamTarget=null;
+
+function enterPlayMode(type){
+  document.getElementById('play-overlay').classList.remove('vis');
+  if(type==='cancel')return;
+  gameMode=true; flightType=type;
+  savedCamPos=camera.position.clone();
+  savedCamTarget=controls.target.clone();
+  controls.enabled=false;
+  document.getElementById('btn-play').style.display='none';
+  document.getElementById('btn-stop').style.display='';
+  document.getElementById('info').style.display='none';
+  document.getElementById('hud').classList.add('vis');
+  // Reset states
+  flightSpeed=FLIGHT_CRUISE_SPEED; flightPitch=0; playerYaw=Math.PI;
+  FC.yaw=Math.PI; FC.pitch=-.15; FC.speed=0;
+
+  if(type==='libre'){
+    document.getElementById('hud-name').textContent='Caméra libre';
+    document.getElementById('hud-keys').innerHTML=
+      'W/Z — Avancer &nbsp; S — Reculer<br>A/Q/← — Gauche &nbsp; D/→ — Droite<br>↑/↓ — Pitch &nbsp; Espace — Monter &nbsp; Ctrl — Descendre<br>ESC — Quitter';
+    playerMesh=null;
+    camera.position.set(CASTLE_X, getH(CASTLE_X,CASTLE_Z)+120, CASTLE_Z+220);
+    return;
+  }
+
+  const def=DEFS.characters.find(d=>d.label.toLowerCase()===type);
+  document.getElementById('hud-name').textContent=def?def.label:type;
+  document.getElementById('hud-keys').innerHTML=
+    'W/Z — Accélérer &nbsp; S — Freiner &nbsp; Shift — Boost<br>A/Q/← — Lacet G &nbsp; D/→ — Lacet D<br>↑/I — Piquer haut &nbsp; ↓/K — Piquer bas<br>Espace/E — Monter &nbsp; Ctrl/C — Descendre<br>ESC — Quitter';
+  if(!def){gameMode=false;return;}
+
+  loadModel(def,src=>{
+    if(!src){exitPlayMode();return;}
+    // inner = le mesh OBJ/GLB, pré-orienté nez vers -Z comme dans chasseur.js
+    const inner=src.clone(true);
+    inner.updateMatrixWorld(true);
+    const box0=new THREE.Box3().setFromObject(inner);
+    const maxDim=Math.max(...box0.getSize(new THREE.Vector3()).toArray())||1;
+    inner.scale.setScalar(8/maxDim);
+    inner.rotation.set(0, -Math.PI/2, 0);   // identique à chasseur.js / wargun.js
+    if(def.texture) inner.traverse(n=>{ if(n.isMesh) n.material=new THREE.MeshStandardMaterial({map:getTex(def.texture),roughness:.6,metalness:.15}); });
+    inner.castShadow=true;
+    // pivot = groupe qui reçoit rotation.set(pitch, yaw, bank) comme "player" dans rzphzel.js
+    const pivot=new THREE.Group();
+    pivot.add(inner);
+    pivot.position.set(CASTLE_X, getH(CASTLE_X,CASTLE_Z)+85, CASTLE_Z);
+    scene.add(pivot);
+    playerMesh=pivot;
+    // Missiles sous les ailes
+    wingMissiles.length=0; missileAmmo=MAX_MISSILES; updateAmmoHUD();
+    buildWingMissiles(pivot);
+  });
+}
+
+function exitPlayMode(){
+  if(!gameMode)return;
+  gameMode=false;
+  controls.enabled=true;
+  if(playerMesh){scene.remove(playerMesh);playerMesh=null;}
+  wingMissiles.length=0;
+  [...bullets,...missiles,...explosions].forEach(o=>scene.remove(o.mesh));
+  bullets.length=0; missiles.length=0; explosions.length=0;
+  if(savedCamPos){camera.position.copy(savedCamPos);controls.target.copy(savedCamTarget);controls.update();}
+  document.getElementById('btn-play').style.display='';
+  document.getElementById('btn-stop').style.display='none';
+  document.getElementById('info').style.display='';
+  document.getElementById('hud').classList.remove('vis');
+}
+
+function updateFlight(delta){
+  if(flightType!=='libre' && playerMesh){
+    // ── Entrées clavier ──────────────────────────────────────────
+    const kFwd  = keys['KeyW']||keys['KeyZ'];
+    const kBrake= keys['KeyS'];
+    const kBoost= keys['ShiftLeft']||keys['ShiftRight'];
+    let yawIn=0, pitchIn=0, climbIn=0;
+    if(keys['KeyA']||keys['KeyQ']||keys['ArrowLeft'])  yawIn  += 1;
+    if(keys['KeyD']||keys['ArrowRight'])               yawIn  -= 1;
+    if(keys['ArrowUp']  ||keys['KeyI'])                pitchIn+= 1;
+    if(keys['ArrowDown']||keys['KeyK'])                pitchIn-= 1;
+    if(keys['Space']||keys['KeyE']||keys['PageUp'])    climbIn+= 1;
+    if(keys['ControlLeft']||keys['ControlRight']||keys['KeyC']||keys['PageDown']) climbIn-= 1;
+
+    // ── Manette ──────────────────────────────────────────────────
+    const gp=getGamepad();
+    let targetSpeed=FLIGHT_CRUISE_SPEED;
+    if(gp){
+      yawIn   = clamp(yawIn  - readAxis(gp,0,.08), -1, 1);
+      pitchIn = clamp(pitchIn+ readAxis(gp,1,.08), -1, 1);
+
+      // Axe 6 = levier de vitesse : -1 → accélérer, +1 → décélérer
+      if(gp.axes.length>6){
+        const a6=gp.axes[6];
+        targetSpeed=((1-a6)/2)*FLIGHT_MAX_SPEED;
+      } else {
+        const rt=readBtn(gp,7), lt=readBtn(gp,6);
+        if(rt>.05) targetSpeed=Math.max(8,rt*FLIGHT_MAX_SPEED);
+        if(lt>.05) targetSpeed=Math.max(0,targetSpeed*(1-lt*.9));
+      }
+
+      if(readBtn(gp,5)>.5) targetSpeed*=1.25;  // RB = boost
+      climbIn=clamp(climbIn+(readBtn(gp,0)>.5?1:0)-(readBtn(gp,1)>.5?1:0)-readAxis(gp,3,.08),-1,1);
+
+      // L3 (btn 10) = zoom moins (caméra plus loin) · R3 (btn 11) = zoom plus (caméra plus proche)
+      if(readBtn(gp,10)>.5) gpCamDistMult=Math.min(4.0, gpCamDistMult+1.5*delta);
+      if(readBtn(gp,11)>.5) gpCamDistMult=Math.max(0.25,gpCamDistMult-1.5*delta);
+    }
+    if(kFwd)  targetSpeed=Math.max(targetSpeed, FLIGHT_MAX_SPEED*.58);
+    if(kBrake)targetSpeed=0;
+    if(kBoost)targetSpeed*=1.25;
+
+    // ── Physique identique au jeu principal ──────────────────────
+    flightSpeed+=(targetSpeed-flightSpeed)*Math.min(1,delta*FLIGHT_ACCEL_RATE);
+    if(Math.abs(flightSpeed)<.05)flightSpeed=0;
+    playerYaw  +=yawIn  *FLIGHT_YAW_RATE  *delta;
+    flightPitch =clamp(flightPitch+pitchIn*FLIGHT_PITCH_RATE*delta, -.48, .52);
+
+    const cosPitch=Math.cos(flightPitch);
+    const fwd=new THREE.Vector3(-Math.sin(playerYaw)*cosPitch, Math.sin(flightPitch), -Math.cos(playerYaw)*cosPitch);
+
+    playerMesh.position.addScaledVector(fwd, flightSpeed*delta);
+    playerMesh.position.y+=climbIn*30*delta;
+
+    // Clamp position
+    const W=MAP_W/2-10;
+    playerMesh.position.x=clamp(playerMesh.position.x,-W,W);
+    playerMesh.position.z=clamp(playerMesh.position.z,-W,W);
+    const minAlt=getH(playerMesh.position.x,playerMesh.position.z)+FLIGHT_MIN_ALT;
+    playerMesh.position.y=clamp(playerMesh.position.y, minAlt, FLIGHT_MAX_ALT);
+    if(playerMesh.position.y<=minAlt+.1)   flightPitch=Math.max(0,flightPitch);
+    if(playerMesh.position.y>=FLIGHT_MAX_ALT-.1) flightPitch=Math.min(0,flightPitch);
+
+    // Rotation exacte jeu principal : rotation.set(pitch, yaw, bank)
+    const bank=yawIn*.45;
+    playerMesh.rotation.set(flightPitch, playerYaw, bank);
+
+    // ── Armes ────────────────────────────────────────────────────
+    const btnANow=(gp&&readBtn(gp,0)>.5)||keys['KeyF'];
+    const btnBNow=(gp&&readBtn(gp,1)>.5)||keys['KeyG'];
+    gunCooldown-=delta;
+    if(btnANow&&gunCooldown<=0){ fireBullet(playerMesh.position.clone(),fwd); gunCooldown=GUN_RATE; }
+    if(btnBNow&&!prevBtnB) fireMissile(playerMesh,fwd);
+    prevBtnB=btnBNow;
+    updateBullets(delta); updateMissiles(delta); updateExplosions(delta);
+
+    // Caméra : strictement derrière l'avion, avion centré à l'écran
+    const camDist=(11+Math.min(7,Math.abs(flightSpeed)/FLIGHT_MAX_SPEED*7))*3.5*gpCamDistMult;
+    const camH  =(3.8+Math.max(0,flightPitch)*3)*3.5*Math.sqrt(gpCamDistMult);
+    const desiredCam=playerMesh.position.clone().addScaledVector(fwd,-camDist).add(new THREE.Vector3(0,camH,0));
+    camera.position.lerp(desiredCam, Math.min(1,delta*4.8));
+    // lookAt sur le pivot (avion centré écran)
+    camera.lookAt(playerMesh.position);
+
+    // HUD
+    document.getElementById('hud-speed').textContent=Math.round(Math.abs(flightSpeed)*3.6)+' km/h';
+    document.getElementById('hud-alt').textContent='Alt : '+Math.round(playerMesh.position.y)+' m';
+    updateGamepadStatus();
+
+  } else {
+    // ── Caméra libre ─────────────────────────────────────────────
+    let yawIn=0, pitchIn=0, fwdIn=0, upIn=0;
+    if(keys['KeyA']||keys['KeyQ']||keys['ArrowLeft'])  yawIn  +=.025;
+    if(keys['KeyD']||keys['ArrowRight'])               yawIn  -=.025;
+    if(keys['ArrowUp']  ||keys['KeyI'])                pitchIn+=.018;
+    if(keys['ArrowDown']||keys['KeyK'])                pitchIn-=.018;
+    if(keys['KeyW']||keys['KeyZ'])                     fwdIn   = 1;
+    if(keys['KeyS'])                                   fwdIn   =-1;
+    if(keys['Space']||keys['KeyE'])                    upIn    = 1;
+    if(keys['ControlLeft']||keys['ControlRight']||keys['KeyC']) upIn=-1;
+
+    const gp=getGamepad();
+    if(gp){
+      yawIn  -= readAxis(gp,0,.08)*.025;
+      pitchIn-= readAxis(gp,1,.08)*.018;
+      const rt=readBtn(gp,7), lt=readBtn(gp,6);
+      if(rt>.05) fwdIn= rt; if(lt>.05) fwdIn=-lt;
+      upIn=clamp(upIn-readAxis(gp,3,.08),-1,1);
+    }
+
+    FC.yaw  +=yawIn;
+    FC.pitch =clamp(FC.pitch+pitchIn, -Math.PI*.45, Math.PI*.45);
+    FC.speed =FC.speed*FC.drag+fwdIn*2.5;
+    const sy=Math.sin(FC.yaw),cy=Math.cos(FC.yaw),sp=Math.sin(FC.pitch),cp=Math.cos(FC.pitch);
+    camera.position.x-=sy*cp*FC.speed*delta*60;
+    camera.position.z-=cy*cp*FC.speed*delta*60;
+    camera.position.y+=sp*FC.speed*delta*60+upIn*2;
+    const gy=getH(camera.position.x,camera.position.z);
+    if(camera.position.y<gy+5) camera.position.y=gy+5;
+    camera.rotation.order='YXZ'; camera.rotation.y=FC.yaw; camera.rotation.x=-FC.pitch;
+    document.getElementById('hud-speed').textContent=Math.round(Math.abs(FC.speed)*3.6)+' km/h';
+    document.getElementById('hud-alt').textContent='Alt : '+Math.round(camera.position.y)+' m';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── ARMES ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Audio synthétisé ─────────────────────────────────────────────────────
+let audioCtx=null;
+function getAudioCtx(){ if(!audioCtx){try{audioCtx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}} return audioCtx; }
+
+function playGunShot(){
+  const ctx=getAudioCtx();if(!ctx)return;
+  const sr=ctx.sampleRate, dur=.065, buf=ctx.createBuffer(1,Math.ceil(sr*dur),sr), d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++){const t=i/sr;d[i]=(Math.random()*2-1)*Math.exp(-t*70)*.9;}
+  const src=ctx.createBufferSource(),g=ctx.createGain();
+  src.buffer=buf;g.gain.value=.55;src.connect(g);g.connect(ctx.destination);src.start();
+}
+
+function playMissileSound(){
+  const ctx=getAudioCtx();if(!ctx)return;
+  const sr=ctx.sampleRate,dur=.9,buf=ctx.createBuffer(1,Math.ceil(sr*dur),sr),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++){
+    const t=i/sr;
+    d[i]=(Math.random()*2-1)*Math.exp(-t*2.2)*.7+Math.sin(t*160)*Math.exp(-t*7)*.35;
+  }
+  const src=ctx.createBufferSource(),g=ctx.createGain();
+  src.buffer=buf;g.gain.value=.65;src.connect(g);g.connect(ctx.destination);src.start();
+}
+
+// ── Mitrailleuse ──────────────────────────────────────────────────────────
+const _bGeo=(()=>{const g=new THREE.CylinderGeometry(.07,.07,2.4,4);g.rotateX(Math.PI/2);return g;})();
+const _bMat=new THREE.MeshBasicMaterial({color:0xffee44});
+
+function fireBullet(pos,dir){
+  playGunShot();
+  const mesh=new THREE.Mesh(_bGeo,_bMat);
+  mesh.position.copy(pos).addScaledVector(dir,4);
+  const up=new THREE.Vector3(0,1,0), right=new THREE.Vector3().crossVectors(dir,up).normalize();
+  const rUp=new THREE.Vector3().crossVectors(right,dir).normalize();
+  mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right,rUp,dir.clone().negate()));
+  scene.add(mesh);
+  bullets.push({mesh,vel:dir.clone().multiplyScalar(BULLET_SPEED),life:BULLET_LIFE});
+}
+
+function updateBullets(delta){
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];
+    b.life-=delta;
+    b.mesh.position.addScaledVector(b.vel,delta);
+    if(b.life<=0||b.mesh.position.y<=getH(b.mesh.position.x,b.mesh.position.z)){
+      scene.remove(b.mesh);bullets.splice(i,1);
+    }
+  }
+}
+
+// ── Missiles ──────────────────────────────────────────────────────────────
+const _mGeo=(()=>{const g=new THREE.CylinderGeometry(.18,.12,3.6,8);g.rotateX(Math.PI/2);return g;})();
+const _mMat=new THREE.MeshStandardMaterial({color:0x8899aa,metalness:.7,roughness:.3});
+const _finGeo=new THREE.BoxGeometry(.06,.5,.9);
+const _finMat=new THREE.MeshStandardMaterial({color:0x556677,metalness:.6});
+
+function buildWingMissiles(pivot){
+  // Missiles sous les ailes : dans l'espace local du pivot, les ailes sont sur l'axe Z
+  [[-3.5,0,-1],[3.5,0,-1],[-4.8,0,.4],[4.8,0,.4]].forEach(([x,y,z],idx)=>{
+    const body=new THREE.Mesh(_mGeo,_mMat.clone());
+    body.position.set(x,y-.9,z);  // sous les ailes
+    [[0,.28],[0,-.28],[.28,0],[-.28,0]].forEach(([fx,fy])=>{
+      const f=new THREE.Mesh(_finGeo,_finMat);f.position.set(fx,fy,1.5);body.add(f);
+    });
+    pivot.add(body);
+    wingMissiles.push(body);
+  });
+}
+
+function removeOneWingMissile(){
+  if(wingMissiles.length===0)return;
+  const wm=wingMissiles.pop();
+  if(wm.parent)wm.parent.remove(wm);
+}
+
+function updateAmmoHUD(){
+  const el=document.getElementById('hud-ammo');
+  if(el) el.textContent='🚀 ×'+missileAmmo;
+}
+
+function fireMissile(pivot,fwd){
+  if(missileAmmo<=0)return;
+  playMissileSound();
+  const right=new THREE.Vector3().crossVectors(fwd,new THREE.Vector3(0,1,0)).normalize();
+  const side=(missileAmmo%2===0)?1:-1;
+  missileAmmo--; updateAmmoHUD(); removeOneWingMissile();
+
+  const startPos=pivot.position.clone()
+    .addScaledVector(right,side*3.5)
+    .addScaledVector(fwd,.5)
+    .add(new THREE.Vector3(0,-1.2,0));
+
+  const body=new THREE.Mesh(_mGeo,_mMat.clone());
+  body.position.copy(startPos);
+
+  // Flamme réacteur
+  const flameMat=new THREE.MeshBasicMaterial({color:0xff7700,transparent:true,opacity:.1});
+  const flame=new THREE.Mesh(new THREE.ConeGeometry(.28,2.5,8,1,true),flameMat);
+  flame.rotation.x=Math.PI/2; flame.position.z=2.2; body.add(flame);
+
+  // Ailettes
+  [[0,.28],[0,-.28],[.28,0],[-.28,0]].forEach(([fx,fy])=>{
+    const f=new THREE.Mesh(_finGeo,_finMat);f.position.set(fx,fy,1.5);body.add(f);
+  });
+
+  scene.add(body);
+  missiles.push({mesh:body,flame,vel:new THREE.Vector3(0,-1.5,0),dir:fwd.clone(),thrustDelay:.28,totalTime:0,life:12});
+}
+
+function updateMissiles(delta){
+  for(let i=missiles.length-1;i>=0;i--){
+    const m=missiles[i];
+    m.life-=delta; m.totalTime+=delta; m.thrustDelay-=delta;
+    if(m.thrustDelay<=0){
+      const thrust=Math.min((m.totalTime-.28)*65,280);
+      m.vel.addScaledVector(m.dir,thrust*delta);
+      const spd=m.vel.length();if(spd>300)m.vel.multiplyScalar(300/spd);
+      const sz=clamp(spd/100,.3,2.2);
+      m.flame.scale.setScalar(sz); m.flame.material.opacity=.75+Math.random()*.25;
+    } else {
+      m.vel.y-=35*delta;
+      m.flame.scale.setScalar(.1+m.totalTime*1.5);
+      m.flame.material.opacity=m.totalTime*2;
+    }
+    m.mesh.position.addScaledVector(m.vel,delta);
+    // Orienter dans la direction de déplacement
+    const lenSq=m.vel.lengthSq();
+    if(lenSq>.01){
+      const d=m.vel.clone().normalize();
+      const r=new THREE.Vector3().crossVectors(d,new THREE.Vector3(0,1,0));
+      if(r.lengthSq()>.001){
+        r.normalize();
+        const u=new THREE.Vector3().crossVectors(r,d).normalize();
+        m.mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(r,u,d.clone().negate()));
+      }
+    }
+    const gy=getH(m.mesh.position.x,m.mesh.position.z);
+    if(m.life<=0||m.mesh.position.y<=gy){
+      if(m.mesh.position.y<=gy) spawnExplosion(m.mesh.position.clone());
+      scene.remove(m.mesh); missiles.splice(i,1);
+    }
+  }
+}
+
+// ── Explosion ─────────────────────────────────────────────────────────────
+function spawnExplosion(pos){
+  const mat=new THREE.MeshBasicMaterial({color:0xff5500,transparent:true,opacity:1});
+  const mesh=new THREE.Mesh(new THREE.SphereGeometry(3,8,6),mat);
+  mesh.position.copy(pos); scene.add(mesh);
+  explosions.push({mesh,life:.45,maxLife:.45});
+}
+function updateExplosions(delta){
+  for(let i=explosions.length-1;i>=0;i--){
+    const e=explosions[i];
+    e.life-=delta;
+    const t=e.life/e.maxLife;
+    e.mesh.scale.setScalar(1+(1-t)*6);
+    e.mesh.material.opacity=t*.9;
+    e.mesh.material.color.setHSL(.07+(1-t)*.1,.95,t*.55);
+    if(e.life<=0){scene.remove(e.mesh);explosions.splice(i,1);}
+  }
+}
+
+// ── Test manette ──────────────────────────────────────────────────────────
+const gpOverlay =document.getElementById('gp-overlay');
+const gpNameEl  =document.getElementById('gp-name');
+const gpAxesEl  =document.getElementById('gp-axes');
+const gpBtnsEl  =document.getElementById('gp-btns');
+const gpNavEl   =document.getElementById('gp-nav');
+let gpVisible   =false;
+let allGamepadIdxs=[]; // liste des manettes connectées
+
+// Construit les étiquettes boutons standards
+const BTN_LABELS=['A','B','X','Y','LB','RB','LT','RT','Sel','St','L3','R3','↑','↓','←','→','Home'];
+
+function buildGpUI(){
+  const gps=(navigator.getGamepads&&navigator.getGamepads())||[];
+  allGamepadIdxs=[...gps].filter(Boolean).map(g=>g.index);
+  if(allGamepadIdxs.length===0){ gpNameEl.textContent='Aucune manette détectée'; gpAxesEl.innerHTML=''; gpBtnsEl.innerHTML=''; gpNavEl.innerHTML=''; return; }
+  // Sélection auto si pas de manette choisie
+  if(gamepadIndex===null||!gps[gamepadIndex]) gamepadIndex=allGamepadIdxs[0];
+  const gp=gps[gamepadIndex]; if(!gp)return;
+  gpNameEl.textContent=`#${gp.index} — ${gp.id.slice(0,38)}`;
+
+  // Nav multi-manettes
+  gpNavEl.innerHTML='';
+  if(allGamepadIdxs.length>1){
+    const prev=document.createElement('button'); prev.textContent='◀'; prev.onclick=()=>{ const i=allGamepadIdxs.indexOf(gamepadIndex); gamepadIndex=allGamepadIdxs[(i-1+allGamepadIdxs.length)%allGamepadIdxs.length]; buildGpUI(); }; gpNavEl.appendChild(prev);
+    const next=document.createElement('button'); next.textContent='▶'; next.onclick=()=>{ const i=allGamepadIdxs.indexOf(gamepadIndex); gamepadIndex=allGamepadIdxs[(i+1)%allGamepadIdxs.length]; buildGpUI(); }; gpNavEl.appendChild(next);
+  }
+
+  // Axes
+  gpAxesEl.innerHTML='';
+  gp.axes.forEach((v,i)=>{
+    const row=document.createElement('div'); row.className='gp-axis';
+    row.innerHTML=`<span class="gp-axis-label">Axe ${i}</span><div class="gp-axis-bar-bg"><div class="gp-axis-fill" id="gp-a${i}-fill"></div></div><span class="gp-axis-val" id="gp-a${i}-val">0.00</span>`;
+    gpAxesEl.appendChild(row);
+  });
+
+  // Boutons
+  gpBtnsEl.innerHTML='';
+  gp.buttons.forEach((_,i)=>{
+    const d=document.createElement('div'); d.className='gp-btn'; d.id=`gp-b${i}`;
+    d.textContent=BTN_LABELS[i]||i; gpBtnsEl.appendChild(d);
+  });
+}
+
+function updateGpUI(){
+  if(!gpVisible)return;
+  const gps=(navigator.getGamepads&&navigator.getGamepads())||[];
+  // Détecter nouvelles connexions
+  const nowIdxs=[...gps].filter(Boolean).map(g=>g.index);
+  if(nowIdxs.length!==allGamepadIdxs.length) buildGpUI();
+  if(gamepadIndex===null)return;
+  const gp=gps[gamepadIndex]; if(!gp)return;
+
+  gp.axes.forEach((v,i)=>{
+    const fill=document.getElementById(`gp-a${i}-fill`), val=document.getElementById(`gp-a${i}-val`);
+    if(!fill||!val)return;
+    const pct=((v+1)/2)*100;
+    fill.style.width=pct+'%'; fill.style.left='0';
+    // Centre neutre indiqué
+    if(v>=0){ fill.style.left='50%'; fill.style.width=(v*50)+'%'; }
+    else     { fill.style.left=((1+v)*50)+'%'; fill.style.width=((-v)*50)+'%'; }
+    val.textContent=v.toFixed(2);
+  });
+  gp.buttons.forEach((b,i)=>{
+    const el=document.getElementById(`gp-b${i}`); if(!el)return;
+    const v=b.value||0, pressed=b.pressed;
+    el.classList.toggle('pressed', pressed&&v>=.99);
+    el.classList.toggle('analog',  v>.02&&v<.99);
+    if(v>.02) el.title=`Valeur : ${v.toFixed(2)}`;
+  });
+}
+
+document.getElementById('btn-gp').addEventListener('click',()=>{
+  gpVisible=!gpVisible;
+  gpOverlay.classList.toggle('vis',gpVisible);
+  if(gpVisible) buildGpUI();
+  document.getElementById('btn-gp').classList.toggle('on',gpVisible);
+});
+window.addEventListener('gamepadconnected',   ()=>{ if(gpVisible)buildGpUI(); });
+window.addEventListener('gamepaddisconnected',()=>{ if(gpVisible)buildGpUI(); });
+
+// ── Boutons UI ────────────────────────────────────────────────────────────
+const btnEditor=document.getElementById('btn-editor');
+const btnPlay  =document.getElementById('btn-play');
+const btnStop  =document.getElementById('btn-stop');
+const overlay  =document.getElementById('play-overlay');
+
+// Éditeur : ON par défaut (panel visible)
+let editorOn=true;
+btnEditor.classList.add('on');
+btnEditor.addEventListener('click',()=>{
+  editorOn=!editorOn;
+  document.body.classList.toggle('no-editor',!editorOn);
+  btnEditor.classList.toggle('on',editorOn);
+  // Déclencher resize pour que le canvas remplisse bien
+  setTimeout(()=>{ camera.aspect=canvasW()/canvasH(); camera.updateProjectionMatrix(); renderer.setSize(canvasW(),canvasH()); },0);
+});
+
+btnPlay.addEventListener('click',()=>{ overlay.classList.add('vis'); });
+btnStop.addEventListener('click',()=>exitPlayMode());
+
+document.querySelectorAll('.vcard').forEach(card=>{
+  card.addEventListener('click',()=>enterPlayMode(card.dataset.v));
+});
+
+// ── Resize ────────────────────────────────────────────────────────────────
+window.addEventListener('resize',()=>{ camera.aspect=canvasW()/canvasH(); camera.updateProjectionMatrix(); renderer.setSize(canvasW(),canvasH()); });
+
+// ── Boucle ────────────────────────────────────────────────────────────────
+let tick=0, lastTime=performance.now();
+(function animate(){
+  requestAnimationFrame(animate);
+  const now=performance.now();
+  const delta=Math.min((now-lastTime)/1000,.05);
+  lastTime=now;
+  if(gameMode){ updateFlight(delta); }
+  else { controls.update(); }
+  updateGpUI();
+  tick+=.008;
+  waterMesh.material.opacity=.74+Math.sin(tick*1.8)*.04;
+  renderer.render(scene,camera);
+})();
+</script>
+</body>
+</html>
