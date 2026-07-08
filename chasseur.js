@@ -6,48 +6,52 @@
 //  texture (l'atlas Meshy etait du bruit colore).
 //  La physique de vol (FLIGHT_*, updateFlight, HUD) reste dans rzphzel.js.
 //
-//  Dependances (scope global) : THREE, window.OBJLoader, player,
+//  Dependances (scope global) : THREE, window.STLLoader, player,
 //  fitStlToPlayer(), hasRenderableMesh(), removePlayerPlaceholder().
 // ==========================================================================
 
-const CHASSEUR_MODEL_PATH = "./perso/chasseur.obj?v=obj-20260609fix";
+const CHASSEUR_MODEL_PATH = "./perso/chasseur2.stl?v=stl-20260708";
 let chasseurModel = null;
 
-function chasseurMetalMaterial() {
+function chasseurMetalMaterial(geometry) {
+  const hasVertexColors = !!(geometry && geometry.hasColors && geometry.getAttribute && geometry.getAttribute("color"));
   return new THREE.MeshStandardMaterial({
-    color: 0x3a4147,     // gunmetal SOMBRE : ne peut pas cramer en blanc sous la lumiere
+    color: hasVertexColors ? 0xffffff : 0x3a4147,
+    vertexColors: hasVertexColors,
+    transparent: hasVertexColors && geometry.alpha < 1,
+    opacity: hasVertexColors ? (geometry.alpha || 1) : 1,
     roughness: 0.55,
-    metalness: 0.35
+    metalness: 0.35,
+    side: THREE.DoubleSide
   });
 }
 
 function loadChasseurModel() {
-  if (!window.OBJLoader) {
-    window.addEventListener("objloaderready", loadChasseurModel, { once: true });
+  if (!window.STLLoader) {
+    window.addEventListener("stlloaderready", loadChasseurModel, { once: true });
     return;
   }
-  new window.OBJLoader().load(
+  new window.STLLoader().load(
     CHASSEUR_MODEL_PATH,
-    obj => {
-      obj.traverse(node => {
-        if (!node.isMesh) return;
-        node.castShadow = true;
-        node.receiveShadow = true;
-        node.frustumCulled = false;
-        node.material = chasseurMetalMaterial();
-      });
+    geometry => {
+      geometry.computeVertexNormals();
+      const mesh = new THREE.Mesh(geometry, chasseurMetalMaterial(geometry));
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false;
+
       const wrapper = new THREE.Group();
-      wrapper.add(obj);
-      obj.rotation.set(0, -Math.PI / 2, 0);   // a plat, nez vers l'avant (-Z), ailes horizontales
+      wrapper.add(mesh);
+      mesh.rotation.set(-Math.PI / 2, 0, 0);  // Z STL = hauteur, nez vers l'avant (-Z)
       fitStlToPlayer(wrapper, 5.0);
       chasseurModel = wrapper;
       player.add(wrapper);
       if (hasRenderableMesh(wrapper)) removePlayerPlaceholder();
       addChasseurThrusters(player, wrapper);
-      console.log("[chasseur] OBJ charge (finition metal militaire)");
+      console.log("[chasseur] STL charge", geometry.hasColors ? "(couleurs STL)" : "(finition metal militaire)");
     },
     undefined,
-    error => console.error("[chasseur] ECHEC chargement OBJ :", error)
+    error => console.error("[chasseur] ECHEC chargement STL :", error)
   );
 }
 
@@ -57,6 +61,11 @@ let chasseurThrusterLoopOn = false;
 
 function makeChasseurThruster(len, rad) {
   const g = new THREE.Group();
+  const nozzle = new THREE.Mesh(
+    new THREE.TorusGeometry(rad * 1.05, rad * 0.14, 10, 24),
+    new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 0.42, metalness: 0.7 })
+  );
+  g.add(nozzle);
   const cone = (r, h, color, op) => {
     const m = new THREE.Mesh(
       new THREE.ConeGeometry(r, h, 18, 1, true),
@@ -78,13 +87,14 @@ function addChasseurThrusters(player, wrapper) {
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   const rearZ = box.max.z;                 // nez en -Z -> arriere en +Z
-  const len = size.z * 0.40, rad = size.y * 0.5;
-  const spread = size.x * 0.13;
+  const len = size.z * 0.20;
+  const rad = Math.max(0.06, size.x * 0.04);
+  const spread = size.x * 0.15;
   const y = center.y - size.y * 0.05;
   const group = new THREE.Group();
   [-spread, spread].forEach(dx => {
     const t = makeChasseurThruster(len, rad);
-    t.position.copy(player.worldToLocal(new THREE.Vector3(center.x + dx, y, rearZ - size.z * 0.02)));
+    t.position.copy(player.worldToLocal(new THREE.Vector3(center.x + dx, y, rearZ - size.z * 0.005)));
     group.add(t);
   });
   player.add(group);

@@ -287,7 +287,8 @@ const MAP_DECOR_OBJECTS = [
 // START
 // Modes qui utilisent le contrÃ´leur de vol (avion qui se bat dans les airs)
 function isFlyingMode(mode){
-  return (mode || playerMode) === "fly" || (mode || playerMode) === "chasseur";
+  const activeMode = mode || playerMode;
+  return activeMode === "fly" || activeMode === "chasseur" || activeMode === "wargun";
 }
 
 function start(mode){
@@ -446,6 +447,7 @@ function init(){
 
   document.addEventListener("keydown", e=>{
     keys[e.code]=true;
+    if(e.code==="KeyM" && typeof openGamepadMapper === "function") openGamepadMapper();
     if(e.code==="KeyE") onScooter=!onScooter;
     if(e.code==="KeyF" && playerMode === "titan") triggerTitanAction("Double_Combo_Attack");
     if(e.code==="KeyF" && playerMode === "pinstripe") triggerPinstripeAction("Double_Combo_Attack");
@@ -2836,6 +2838,302 @@ function readGamepadButton(gamepad, buttonIndex) {
   return !!(gamepad && gamepad.buttons && gamepad.buttons[buttonIndex] && gamepad.buttons[buttonIndex].pressed);
 }
 
+const FLIGHT_GAMEPAD_BINDINGS_KEY = "raphael.flightGamepadBindings.v1";
+const FLIGHT_GAMEPAD_ACTIONS = [
+  { id: "yaw", label: "Lacet gauche/droite", capture: "axis", defaultBinding: { type: "axis", index: 0, scale: -1 } },
+  { id: "pitch", label: "Pitch haut/bas", capture: "axis", defaultBinding: { type: "axis", index: 1, scale: 1 } },
+  { id: "throttle", label: "Vitesse", capture: "value", defaultBinding: { type: "button", index: 7 } },
+  { id: "brake", label: "Ralentir", capture: "value", defaultBinding: { type: "button", index: 6 } },
+  { id: "climb", label: "Monter/descendre vertical", capture: "axis", defaultBinding: { type: "axis", index: 3, scale: -1 } },
+  { id: "boost", label: "Boost", capture: "button", defaultBinding: { type: "button", index: 5 } },
+  { id: "fire", label: "Tir", capture: "button", defaultBinding: { type: "button", index: 2 } }
+];
+
+let flightGamepadBindings = loadFlightGamepadBindings();
+const gamepadMapperState = {
+  open: false,
+  captureAction: null,
+  baseline: null,
+  raf: 0
+};
+
+function loadFlightGamepadBindings() {
+  try {
+    const raw = window.localStorage && window.localStorage.getItem(FLIGHT_GAMEPAD_BINDINGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    console.warn("[gamepad] impossible de lire les commandes sauvegardees", error);
+    return {};
+  }
+}
+
+function saveFlightGamepadBindings() {
+  try {
+    window.localStorage.setItem(FLIGHT_GAMEPAD_BINDINGS_KEY, JSON.stringify(flightGamepadBindings));
+  } catch (error) {
+    console.warn("[gamepad] impossible de sauvegarder les commandes", error);
+  }
+}
+
+function resetFlightGamepadBindings() {
+  flightGamepadBindings = {};
+  try {
+    window.localStorage.removeItem(FLIGHT_GAMEPAD_BINDINGS_KEY);
+  } catch (error) {
+    console.warn("[gamepad] impossible de reinitialiser les commandes", error);
+  }
+  gamepadMapperState.captureAction = null;
+  gamepadMapperState.baseline = null;
+  renderGamepadMapper();
+}
+
+function getFlightGamepadAction(actionId) {
+  return FLIGHT_GAMEPAD_ACTIONS.find(action => action.id === actionId) || null;
+}
+
+function getFlightGamepadBinding(actionId) {
+  const action = getFlightGamepadAction(actionId);
+  if (!action) return null;
+  return flightGamepadBindings[actionId] || action.defaultBinding;
+}
+
+function getCustomFlightGamepadBinding(actionId) {
+  return flightGamepadBindings[actionId] || null;
+}
+
+function readGamepadBindingValue(gamepad, binding, deadZone) {
+  if (!gamepad || !binding) return 0;
+  if (binding.type === "axis") {
+    return clampValue(readGamepadAxis(gamepad, binding.index, deadZone) * (binding.scale || 1), -1, 1);
+  }
+  if (binding.type === "button") {
+    return readGamepadButtonValue(gamepad, binding.index);
+  }
+  return 0;
+}
+
+function readFlightGamepadControl(gamepad, actionId, deadZone = GAMEPAD_DEAD_ZONE) {
+  return readGamepadBindingValue(gamepad, getFlightGamepadBinding(actionId), deadZone);
+}
+
+function readCustomFlightGamepadControl(gamepad, actionId, deadZone = GAMEPAD_DEAD_ZONE) {
+  const binding = getCustomFlightGamepadBinding(actionId);
+  return binding ? readGamepadBindingValue(gamepad, binding, deadZone) : null;
+}
+
+function isFlightGamepadFirePressed() {
+  const gamepad = findFlightGamepad();
+  return !!(gamepad && readFlightGamepadControl(gamepad, "fire", 0.08) > 0.55);
+}
+window.isFlightGamepadFirePressed = isFlightGamepadFirePressed;
+
+function describeGamepadBinding(binding) {
+  if (!binding) return "non defini";
+  if (binding.type === "axis") {
+    return `Axe ${binding.index} ${binding.scale < 0 ? "-" : "+"}`;
+  }
+  if (binding.type === "button") return `Bouton ${binding.index}`;
+  return "commande inconnue";
+}
+
+function snapshotGamepad(gamepad) {
+  return {
+    axes: Array.from(gamepad && gamepad.axes || []),
+    buttons: Array.from(gamepad && gamepad.buttons || []).map(button => {
+      if (!button) return 0;
+      return typeof button.value === "number" ? button.value : (button.pressed ? 1 : 0);
+    })
+  };
+}
+
+function detectGamepadBinding(gamepad, baseline, action) {
+  if (!gamepad || !baseline || !action) return null;
+
+  const axisCandidates = [];
+  const axes = gamepad.axes || [];
+  for (let i = 0; i < axes.length; i++) {
+    const value = Number.isFinite(axes[i]) ? axes[i] : 0;
+    const base = Number.isFinite(baseline.axes[i]) ? baseline.axes[i] : 0;
+    const delta = Math.abs(value - base);
+    if (Math.abs(value) > 0.48 && delta > 0.32) {
+      axisCandidates.push({
+        score: delta + Math.abs(value) * 0.2,
+        binding: { type: "axis", index: i, scale: value >= 0 ? 1 : -1 }
+      });
+    }
+  }
+
+  const buttonCandidates = [];
+  const buttons = gamepad.buttons || [];
+  for (let i = 0; i < buttons.length; i++) {
+    const value = readGamepadButtonValue(gamepad, i);
+    const base = Number.isFinite(baseline.buttons[i]) ? baseline.buttons[i] : 0;
+    const delta = value - base;
+    if (value > 0.52 && delta > 0.28) {
+      buttonCandidates.push({ score: delta + value * 0.2, binding: { type: "button", index: i } });
+    }
+  }
+
+  axisCandidates.sort((a, b) => b.score - a.score);
+  buttonCandidates.sort((a, b) => b.score - a.score);
+
+  if (action.capture === "axis") return axisCandidates[0] ? axisCandidates[0].binding : null;
+  if (action.capture === "button") return (buttonCandidates[0] || axisCandidates[0] || null)?.binding || null;
+
+  const bestAxis = axisCandidates[0] || null;
+  const bestButton = buttonCandidates[0] || null;
+  if (!bestAxis) return bestButton ? bestButton.binding : null;
+  if (!bestButton) return bestAxis.binding;
+  return bestButton.score >= bestAxis.score ? bestButton.binding : bestAxis.binding;
+}
+
+function updateGamepadMapperStatus(gamepad) {
+  const status = document.getElementById("gamepad-status");
+  if (!status) return;
+  if (!navigator.getGamepads) {
+    status.textContent = "API manette indisponible dans ce navigateur";
+    return;
+  }
+  status.textContent = gamepad
+    ? `${shortGamepadName(gamepad)} actif - ${gamepad.axes.length} axes, ${gamepad.buttons.length} boutons`
+    : flightGamepadStatus;
+}
+
+function updateGamepadMapperReadout(gamepad) {
+  const axesEl = document.getElementById("gamepad-axes");
+  const buttonsEl = document.getElementById("gamepad-buttons");
+  if (axesEl) {
+    axesEl.textContent = gamepad && gamepad.axes && gamepad.axes.length
+      ? Array.from(gamepad.axes).map((value, index) => `${index}: ${value.toFixed(2)}`).join("   ")
+      : "aucun axe";
+  }
+  if (buttonsEl) {
+    buttonsEl.textContent = gamepad && gamepad.buttons && gamepad.buttons.length
+      ? Array.from(gamepad.buttons).map((button, index) => `${index}: ${readGamepadButtonValue(gamepad, index).toFixed(2)}`).join("   ")
+      : "aucun bouton";
+  }
+}
+
+function renderGamepadMapper() {
+  const list = document.getElementById("gamepad-list");
+  const capture = document.getElementById("gamepad-capture");
+  const gamepad = findFlightGamepad();
+  updateGamepadMapperStatus(gamepad);
+  updateGamepadMapperReadout(gamepad);
+
+  if (capture && !gamepadMapperState.captureAction) {
+    capture.textContent = "Choisis une commande, puis bouge le stick ou appuie sur le bouton.";
+  }
+  if (!list) return;
+
+  list.innerHTML = FLIGHT_GAMEPAD_ACTIONS.map(action => {
+    const binding = getFlightGamepadBinding(action.id);
+    const mode = flightGamepadBindings[action.id] ? "Enregistre" : "Defaut";
+    return `
+      <div class="gamepad-row">
+        <div>
+          <strong>${action.label}</strong>
+          <span>${mode} - ${describeGamepadBinding(binding)}</span>
+        </div>
+        <button class="gamepad-small" type="button" data-gamepad-action="${action.id}">Enregistrer</button>
+      </div>
+    `;
+  }).join("");
+
+  list.querySelectorAll("[data-gamepad-action]").forEach(button => {
+    button.addEventListener("click", () => beginGamepadCapture(button.getAttribute("data-gamepad-action")));
+  });
+}
+
+function beginGamepadCapture(actionId) {
+  const action = getFlightGamepadAction(actionId);
+  const gamepad = findFlightGamepad();
+  const capture = document.getElementById("gamepad-capture");
+  if (!action) return;
+  if (!gamepad) {
+    if (capture) capture.textContent = "Appuie d'abord sur un bouton de la manette pour que le navigateur la detecte.";
+    return;
+  }
+  gamepadMapperState.captureAction = actionId;
+  gamepadMapperState.baseline = snapshotGamepad(gamepad);
+  if (capture) capture.textContent = `En attente : ${action.label}`;
+}
+
+function tickGamepadMapper() {
+  if (!gamepadMapperState.open) return;
+  const gamepad = findFlightGamepad();
+  updateGamepadMapperStatus(gamepad);
+  updateGamepadMapperReadout(gamepad);
+
+  if (gamepadMapperState.captureAction && gamepad) {
+    const action = getFlightGamepadAction(gamepadMapperState.captureAction);
+    const binding = detectGamepadBinding(gamepad, gamepadMapperState.baseline, action);
+    if (binding) {
+      flightGamepadBindings[action.id] = binding;
+      saveFlightGamepadBindings();
+      gamepadMapperState.captureAction = null;
+      gamepadMapperState.baseline = null;
+      const capture = document.getElementById("gamepad-capture");
+      if (capture) capture.textContent = `${action.label} : ${describeGamepadBinding(binding)} sauvegarde`;
+      renderGamepadMapper();
+    }
+  }
+
+  gamepadMapperState.raf = requestAnimationFrame(tickGamepadMapper);
+}
+
+function openGamepadMapper() {
+  setupGamepadMapperUi();
+  const panel = document.getElementById("gamepad-mapper");
+  if (!panel) return;
+  if (document.exitPointerLock && document.pointerLockElement) document.exitPointerLock();
+  panel.style.display = "flex";
+  panel.setAttribute("aria-hidden", "false");
+  gamepadMapperState.open = true;
+  renderGamepadMapper();
+  cancelAnimationFrame(gamepadMapperState.raf);
+  tickGamepadMapper();
+}
+
+function closeGamepadMapper() {
+  const panel = document.getElementById("gamepad-mapper");
+  if (panel) {
+    panel.style.display = "none";
+    panel.setAttribute("aria-hidden", "true");
+  }
+  gamepadMapperState.open = false;
+  gamepadMapperState.captureAction = null;
+  gamepadMapperState.baseline = null;
+  cancelAnimationFrame(gamepadMapperState.raf);
+}
+
+function setupGamepadMapperUi() {
+  const close = document.getElementById("gamepad-close");
+  const detect = document.getElementById("gamepad-detect");
+  const reset = document.getElementById("gamepad-reset");
+  if (close && !close.dataset.bound) {
+    close.dataset.bound = "1";
+    close.addEventListener("click", closeGamepadMapper);
+  }
+  if (detect && !detect.dataset.bound) {
+    detect.dataset.bound = "1";
+    detect.addEventListener("click", renderGamepadMapper);
+  }
+  if (reset && !reset.dataset.bound) {
+    reset.dataset.bound = "1";
+    reset.addEventListener("click", resetFlightGamepadBindings);
+  }
+}
+
+window.openGamepadMapper = openGamepadMapper;
+window.closeGamepadMapper = closeGamepadMapper;
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", setupGamepadMapperUi, { once: true });
+} else {
+  setupGamepadMapperUi();
+}
+
 function readGroundGamepadInput() {
   const neutral = {
     forward: 0,
@@ -2885,9 +3183,11 @@ function updateFlightHud() {
 
   const speedKmh = Math.round(Math.abs(flightSpeed) * 3.6);
   const altitude = Math.round(player.position.y);
-  const flightLabel = playerMode === "chasseur" ? "Avion chasseur" : "Vue avion";
+  const flightLabel = playerMode === "chasseur" ? "Avion chasseur"
+                    : playerMode === "wargun" ? "Wargun"
+                    : "Vue avion";
   hudEl.innerHTML =
-    `${flightLabel} &nbsp; Stick=diriger &nbsp; RT/throttle=vitesse &nbsp; W/Z=accel &nbsp; A/D=lacet &nbsp; fleches=pitch &nbsp; ESPACE/E/A=monter &nbsp; CTRL/C/B=descendre`
+    `${flightLabel} &nbsp; Stick=diriger &nbsp; RT/throttle=vitesse &nbsp; W/Z=accel &nbsp; A/D=lacet &nbsp; fleches=pitch &nbsp; M=manette`
     + `<br><span style="font-size:22px;font-weight:bold">${speedKmh} <small>km/h</small></span>`
     + `&nbsp;&nbsp;<span style="font-size:18px;font-weight:bold">${altitude} <small>m</small></span>`
     + `&nbsp;&nbsp;<span style="opacity:0.75">[SURVOL]</span>`
@@ -2914,33 +3214,67 @@ function updateFlyoverMode(delta) {
   const gamepad = findFlightGamepad();
   let targetSpeed = FLIGHT_CRUISE_SPEED;
   if (gamepad) {
-    const stickX = readGamepadAxis(gamepad, 0, 0.08);
-    const stickY = readGamepadAxis(gamepad, 1, 0.08);
     const isStandardPad = isStandardMappedGamepad(gamepad);
-    yawInput += -stickX;
-    pitchInput += stickY;
+    const customYaw = readCustomFlightGamepadControl(gamepad, "yaw", 0.08);
+    const customPitch = readCustomFlightGamepadControl(gamepad, "pitch", 0.08);
+    const customThrottle = readCustomFlightGamepadControl(gamepad, "throttle", 0.05);
+    const customBrake = readCustomFlightGamepadControl(gamepad, "brake", 0.05);
+    const customClimb = readCustomFlightGamepadControl(gamepad, "climb", GAMEPAD_DEAD_ZONE);
+    const customBoost = readCustomFlightGamepadControl(gamepad, "boost", 0.08);
 
-    if (isStandardPad) {
-      const triggerLeft = readGamepadButtonValue(gamepad, 6);
+    if (customYaw !== null) {
+      yawInput += customYaw;
+    } else {
+      yawInput += -readGamepadAxis(gamepad, 0, 0.08);
+      if (!isStandardPad) {
+        const twist = readGamepadAxis(gamepad, 2, 0.12);
+        yawInput += -twist * 0.55;
+      }
+    }
+
+    if (customPitch !== null) {
+      pitchInput += customPitch;
+    } else {
+      pitchInput += readGamepadAxis(gamepad, 1, 0.08);
+    }
+
+    if (customThrottle !== null) {
+      const throttle = Math.max(0, customThrottle);
+      if (throttle > 0.05) targetSpeed = Math.max(8, throttle * FLIGHT_MAX_SPEED);
+    } else if (isStandardPad) {
       const triggerRight = readGamepadButtonValue(gamepad, 7);
-      const rightY = readGamepadAxis(gamepad, 3, GAMEPAD_DEAD_ZONE);
       if (triggerRight > 0.05) {
         targetSpeed = Math.max(8, triggerRight * FLIGHT_MAX_SPEED);
       }
+    } else if (gamepad.axes && gamepad.axes.length > 3 && Number.isFinite(gamepad.axes[3])) {
+      const throttle = clampValue((1 - gamepad.axes[3]) / 2, 0, 1);
+      targetSpeed = Math.max(8, throttle * FLIGHT_MAX_SPEED);
+    }
+
+    if (customBrake !== null) {
+      const brake = Math.max(0, customBrake);
+      if (brake > 0.05) targetSpeed = Math.max(0, targetSpeed * (1 - brake * 0.9));
+    } else if (isStandardPad) {
+      const triggerLeft = readGamepadButtonValue(gamepad, 6);
       if (triggerLeft > 0.05) {
         targetSpeed = Math.max(0, targetSpeed * (1 - triggerLeft * 0.9));
       }
+    }
+
+    if (customBoost !== null) {
+      if (customBoost > 0.55) targetSpeed *= 1.2;
+    } else if (isStandardPad) {
       if (readGamepadButton(gamepad, 5)) targetSpeed *= 1.2;
+    }
+
+    if (customClimb !== null) {
+      climbInput += customClimb;
+    } else if (isStandardPad) {
+      const rightY = readGamepadAxis(gamepad, 3, GAMEPAD_DEAD_ZONE);
       if (readGamepadButton(gamepad, 0)) climbInput += 1;
       if (readGamepadButton(gamepad, 1) || readGamepadButton(gamepad, 4)) climbInput -= 1;
       climbInput += -rightY;
     } else {
-      const twist = readGamepadAxis(gamepad, 2, 0.12);
-      yawInput += -twist * 0.55;
-      if (gamepad.axes && gamepad.axes.length > 3 && Number.isFinite(gamepad.axes[3])) {
-        const throttle = clampValue((1 - gamepad.axes[3]) / 2, 0, 1);
-        targetSpeed = Math.max(8, throttle * FLIGHT_MAX_SPEED);
-      }
       if (readGamepadButton(gamepad, 4)) climbInput -= 1;
       if (readGamepadButton(gamepad, 5)) climbInput += 1;
     }

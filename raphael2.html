@@ -22,6 +22,119 @@ button { padding: 15px; margin: 10px; font-size: 20px; }
   top: 10px; left: 10px;
   color: white;
 }
+
+#gamepad-mapper {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 8, 12, 0.78);
+  color: #f8fbff;
+}
+
+.gamepad-card {
+  width: min(920px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: #111820;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 8px;
+  box-shadow: 0 20px 70px rgba(0,0,0,0.45);
+  padding: 18px;
+}
+
+.gamepad-head,
+.gamepad-toolbar,
+.gamepad-row,
+.gamepad-live {
+  display: flex;
+  gap: 12px;
+}
+
+.gamepad-head,
+.gamepad-row {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gamepad-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.gamepad-close,
+.gamepad-small {
+  padding: 8px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.gamepad-toolbar {
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.gamepad-status,
+.gamepad-capture {
+  margin: 10px 0;
+  color: #b8c7d8;
+  font: 14px/1.4 monospace;
+}
+
+.gamepad-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gamepad-row {
+  min-height: 42px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 6px;
+}
+
+.gamepad-row strong {
+  display: block;
+  font-size: 14px;
+}
+
+.gamepad-row span {
+  display: block;
+  color: #9fb1c3;
+  font: 12px monospace;
+}
+
+.gamepad-live {
+  margin-top: 14px;
+  align-items: stretch;
+}
+
+.gamepad-live > div {
+  flex: 1 1 0;
+  min-width: 0;
+  background: rgba(0,0,0,0.26);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.gamepad-readout {
+  margin-top: 8px;
+  color: #d7e6f5;
+  font: 12px/1.55 monospace;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 760px) {
+  .gamepad-list,
+  .gamepad-live {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+}
 </style>
 </head>
 <body>
@@ -36,10 +149,37 @@ button { padding: 15px; margin: 10px; font-size: 20px; }
   <button onclick="start('chasseur')">Jouer avec l'avion chasseur</button>
   <button onclick="start('wargun')">Jouer avec le Wargun</button>
   <button onclick="start('fly')">Survoler la ville</button>
+  <button onclick="openGamepadMapper()">Regler la manette</button>
   <button onclick="location.href='puppet_animation_editor.html'">Marionnette animation</button>
 </div>
 
 <div id="hud" style="display:none; position:absolute; top:12px; left:12px; background:rgba(0,0,0,0.55); color:white; font:14px monospace; padding:10px 16px; border-radius:8px; z-index:30; pointer-events:none; line-height:1.7;"></div>
+
+<div id="gamepad-mapper" aria-hidden="true">
+  <div class="gamepad-card">
+    <div class="gamepad-head">
+      <h2>Reglage manette</h2>
+      <button id="gamepad-close" class="gamepad-close" type="button">Fermer</button>
+    </div>
+    <div id="gamepad-status" class="gamepad-status">Manette non detectee</div>
+    <div class="gamepad-toolbar">
+      <button id="gamepad-detect" class="gamepad-small" type="button">Detecter</button>
+      <button id="gamepad-reset" class="gamepad-small" type="button">Reinitialiser</button>
+    </div>
+    <div id="gamepad-capture" class="gamepad-capture">Choisis une commande, puis bouge le stick ou appuie sur le bouton.</div>
+    <div id="gamepad-list" class="gamepad-list"></div>
+    <div class="gamepad-live">
+      <div>
+        <strong>Axes</strong>
+        <div id="gamepad-axes" class="gamepad-readout"></div>
+      </div>
+      <div>
+        <strong>Boutons</strong>
+        <div id="gamepad-buttons" class="gamepad-readout"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="libs/three.min.js"></script>
 <script type="importmap">
@@ -68,10 +208,10 @@ button { padding: 15px; margin: 10px; font-size: 20px; }
   window.dispatchEvent(new Event('objloaderready'));
 </script>
 <script src="poilhes-game-map.js?v=poilhes-20260504"></script>
-<script src="chasseur.js?v=chasseur-20260609-thrust"></script>
-<script src="wargun.js?v=wargun-20260609fix"></script>
-<script src="rzphzel.js?v=unify-20260618-glbeditor"></script>
-<script src="combat.js?v=combat-20260609"></script>
+<script src="chasseur.js?v=chasseur-stl-20260708"></script>
+<script src="wargun.js?v=wargun-stl-20260708"></script>
+<script src="rzphzel.js?v=gamepad-map-20260708"></script>
+<script src="combat.js?v=combat-gamepad-20260708"></script>
 <script src="ulvheim.js?v=ulvheim-20260618b"></script>
 
 </body>

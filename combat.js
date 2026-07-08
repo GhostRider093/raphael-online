@@ -72,7 +72,7 @@
     if (hudEl) hudEl.style.display = "none";
   }
   function updateHud() {
-    if (hudEl) hudEl.textContent = "CIBLES  " + score + " / " + TARGET_COUNT + "   [ESPACE = tir]";
+    if (hudEl) hudEl.textContent = "CIBLES  " + score + " / " + TARGET_COUNT + "   [ESPACE/manette = tir]";
   }
 
   // ── CIBLES ──────────────────────────────────────────────────────────────
@@ -231,7 +231,8 @@
     const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
     fireTimer -= dt;
 
-    const fireKey = (typeof keys !== "undefined" && keys && keys["Space"]) || mouseFire;
+    const gamepadFire = typeof isFlightGamepadFirePressed === "function" && isFlightGamepadFirePressed();
+    const fireKey = (typeof keys !== "undefined" && keys && keys["Space"]) || mouseFire || gamepadFire;
     if (fireKey && fireTimer <= 0) { fireMissile(); fireTimer = FIRE_COOLDOWN; }
     prevFire = fireKey;
 
