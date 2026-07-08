@@ -779,7 +779,7 @@ function hasRenderableMesh(root) {
   let meshCount = 0;
   let vertexCount = 0;
   root.traverse(node => {
-    if (!node.isMesh || node.visible === false) return;
+    if (!(node.isMesh || node.type === "Mesh" || (node.geometry && node.material)) || node.visible === false) return;
     meshCount++;
     const position = node.geometry && node.geometry.attributes && node.geometry.attributes.position;
     vertexCount += position ? position.count : 0;

@@ -6,52 +6,95 @@
 //  texture (l'atlas Meshy etait du bruit colore).
 //  La physique de vol (FLIGHT_*, updateFlight, HUD) reste dans rzphzel.js.
 //
-//  Dependances (scope global) : THREE, window.STLLoader, player,
+//  Dependances (scope global) : THREE, window.OBJLoader, player,
 //  fitStlToPlayer(), hasRenderableMesh(), removePlayerPlaceholder().
 // ==========================================================================
 
-const CHASSEUR_MODEL_PATH = "./perso/chasseur2.stl?v=stl-20260708";
+const CHASSEUR_ASSET_DIR = "./perso/chasseur-texture/";
+const CHASSEUR_OBJ_FILE = "Meshy_AI_Avion_type_chasseur_d_0708033342_texture.obj?v=obj-texture-20260708c";
+const CHASSEUR_TEXTURE_FILE = "Meshy_AI_Avion_type_chasseur_d_0708033342_texture.png?v=obj-texture-20260708c";
 let chasseurModel = null;
+let chasseurTexture = null;
 
-function chasseurMetalMaterial(geometry) {
-  const hasVertexColors = !!(geometry && geometry.hasColors && geometry.getAttribute && geometry.getAttribute("color"));
+function getChasseurTexture() {
+  if (chasseurTexture) return chasseurTexture;
+  chasseurTexture = new THREE.TextureLoader().setPath(CHASSEUR_ASSET_DIR).load(
+    CHASSEUR_TEXTURE_FILE,
+    () => {
+      document.body.dataset.fighterTexture = "loaded";
+      console.log("[chasseur] texture PNG chargee");
+    },
+    undefined,
+    error => {
+      document.body.dataset.fighterTexture = "error";
+      console.error("[chasseur] ECHEC chargement texture PNG :", error);
+    }
+  );
+  if (THREE.SRGBColorSpace) chasseurTexture.colorSpace = THREE.SRGBColorSpace;
+  else chasseurTexture.encoding = THREE.sRGBEncoding;
+  chasseurTexture.anisotropy = 8;
+  document.body.dataset.fighterTexture = "loading";
+  return chasseurTexture;
+}
+
+function makeChasseurTextureMaterial() {
   return new THREE.MeshStandardMaterial({
-    color: hasVertexColors ? 0xffffff : 0x3a4147,
-    vertexColors: hasVertexColors,
-    transparent: hasVertexColors && geometry.alpha < 1,
-    opacity: hasVertexColors ? (geometry.alpha || 1) : 1,
-    roughness: 0.55,
-    metalness: 0.35,
+    map: getChasseurTexture(),
+    color: 0x9fb3c2,
+    roughness: 0.72,
+    metalness: 0.08,
     side: THREE.DoubleSide
   });
 }
 
-function loadChasseurModel() {
-  if (!window.STLLoader) {
-    window.addEventListener("stlloaderready", loadChasseurModel, { once: true });
+function prepareChasseurObject(obj) {
+  const material = makeChasseurTextureMaterial();
+  let texturedMeshes = 0;
+  obj.traverse(node => {
+    if (!(node.isMesh || node.type === "Mesh" || (node.geometry && node.material))) return;
+    node.castShadow = true;
+    node.receiveShadow = true;
+    node.frustumCulled = false;
+    node.material = material;
+    texturedMeshes++;
+  });
+  document.body.dataset.fighterTexturedMeshes = String(texturedMeshes);
+}
+
+function loadTexturedChasseurObject(onLoaded, label) {
+  if (!window.OBJLoader) {
+    const retry = () => loadTexturedChasseurObject(onLoaded, label);
+    if (!window.OBJLoader) window.addEventListener("objloaderready", retry, { once: true });
     return;
   }
-  new window.STLLoader().load(
-    CHASSEUR_MODEL_PATH,
-    geometry => {
-      geometry.computeVertexNormals();
-      const mesh = new THREE.Mesh(geometry, chasseurMetalMaterial(geometry));
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false;
 
+  new window.OBJLoader()
+    .setPath(CHASSEUR_ASSET_DIR)
+    .load(
+      CHASSEUR_OBJ_FILE,
+      obj => {
+        prepareChasseurObject(obj);
+        onLoaded(obj);
+        console.log(`[${label}] OBJ texture charge`);
+      },
+      undefined,
+      error => console.error(`[${label}] ECHEC chargement OBJ texture :`, error)
+    );
+}
+
+function loadChasseurModel() {
+  loadTexturedChasseurObject(
+    obj => {
       const wrapper = new THREE.Group();
-      wrapper.add(mesh);
-      mesh.rotation.set(-Math.PI / 2, 0, 0);  // Z STL = hauteur, nez vers l'avant (-Z)
+      wrapper.add(obj);
+      obj.rotation.set(0, -Math.PI / 2, 0);   // orientation OBJ Meshy deja validee
       fitStlToPlayer(wrapper, 5.0);
       chasseurModel = wrapper;
       player.add(wrapper);
       if (hasRenderableMesh(wrapper)) removePlayerPlaceholder();
       addChasseurThrusters(player, wrapper);
-      console.log("[chasseur] STL charge", geometry.hasColors ? "(couleurs STL)" : "(finition metal militaire)");
     },
-    undefined,
-    error => console.error("[chasseur] ECHEC chargement STL :", error)
+    "chasseur"
   );
 }
 
