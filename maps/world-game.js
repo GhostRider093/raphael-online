@@ -417,14 +417,35 @@ function startWorld() {
     });
     setInfoOpen(false);
 
-    let fullscreenRequested = false;
-    document.addEventListener('pointerdown', () => {
-      if (fullscreenRequested || document.fullscreenElement) return;
-      fullscreenRequested = true;
-      const root = document.documentElement;
-      const request = root.requestFullscreen || root.webkitRequestFullscreen;
-      if (request) Promise.resolve(request.call(root, { navigationUI: 'hide' })).catch(() => {});
-    }, { passive: true, once: true });
+    const fullscreenToggle = document.getElementById('fullscreen-toggle');
+    const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+    const renderFullscreenButton = () => {
+      const active = !!fullscreenElement();
+      fullscreenToggle.classList.toggle('active', active);
+      fullscreenToggle.textContent = active ? 'QUITTER ÉCRAN' : 'PLEIN ÉCRAN';
+    };
+    fullscreenToggle.addEventListener('click', async event => {
+      event.preventDefault();
+      try {
+        if (fullscreenElement()) {
+          const exit = document.exitFullscreen || document.webkitExitFullscreen;
+          if (exit) await exit.call(document);
+        } else {
+          const root = document.documentElement;
+          const request = root.requestFullscreen || root.webkitRequestFullscreen;
+          if (!request) throw new Error('indisponible');
+          await request.call(root, { navigationUI: 'hide' });
+        }
+      } catch {
+        fullscreenToggle.textContent = 'PLEIN ÉCRAN INDISPO';
+        window.setTimeout(renderFullscreenButton, 1600);
+        return;
+      }
+      renderFullscreenButton();
+    });
+    document.addEventListener('fullscreenchange', renderFullscreenButton);
+    document.addEventListener('webkitfullscreenchange', renderFullscreenButton);
+    renderFullscreenButton();
   }
 
   const raceGates = built.raceGates || [];

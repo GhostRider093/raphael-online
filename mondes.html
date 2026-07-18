@@ -129,7 +129,7 @@
     #race-time { margin-top:2px; color:#b8ff76; font:700 18px/1.15 Consolas,monospace; }
     #race-best { margin-top:2px; color:rgba(222,242,252,.68); font:9px Consolas,monospace; }
     #world-touch { display:none; position:absolute; z-index:27; inset:0; pointer-events:none; }
-    #mobile-control-tools { position:absolute; left:max(12px,env(safe-area-inset-left)); bottom:max(18px,env(safe-area-inset-bottom)); display:flex; gap:7px; pointer-events:auto; }
+    #mobile-control-tools { position:absolute; left:max(12px,env(safe-area-inset-left)); bottom:max(18px,env(safe-area-inset-bottom)); display:flex; flex-wrap:wrap; gap:7px; max-width:calc(100vw - 190px); pointer-events:auto; }
     .mobile-control-toggle { min-height:38px; padding:7px 10px; color:#dff8ff; border:1px solid rgba(99,217,255,.42); border-radius:9px; background:rgba(4,11,18,.78); font:800 9px/1.15 Arial,sans-serif; letter-spacing:.45px; touch-action:manipulation; }
     .mobile-control-toggle.active { color:#eaffdc; border-color:var(--lime); background:rgba(75,132,43,.72); }
     #motion-state { position:absolute; left:max(14px,env(safe-area-inset-left)); bottom:max(61px,calc(env(safe-area-inset-bottom) + 47px)); color:rgba(225,247,255,.72); font:700 8px/1.2 Arial,sans-serif; text-shadow:0 1px 4px #000; pointer-events:none; }
@@ -244,6 +244,7 @@
       <div id="mobile-control-tools">
         <button id="motion-toggle" class="mobile-control-toggle" type="button">INCLINAISON</button>
         <button id="stick-toggle" class="mobile-control-toggle active" type="button">JOYSTICK</button>
+        <button id="fullscreen-toggle" class="mobile-control-toggle" type="button">PLEIN ÉCRAN</button>
       </div>
       <div class="world-touch-buttons">
         <button class="world-touch-button" data-world-touch="boost">BOOST</button>
