@@ -307,14 +307,14 @@ export const WORLD_MAPS = [
     objectives: ['Franchir les 12 portes dans l’ordre', 'Rester entre les deux parois géantes', 'Battre le meilleur temps du circuit'], modes: allModes
   },
   {
-    id: 'kenney-road-lab', name: 'Ville des Routes 3D', icon: '▦', category: 'Objets 3D Kenney', seed: 22817, size: 1150,
+    id: 'kenney-road-lab', name: 'Ville des Routes 3D', icon: '▦', category: 'Objets 3D Kenney', seed: 22817, size: 1400,
     tagline: 'Une map laboratoire construite uniquement avec les 72 objets du City Kit Roads.',
     description: 'Routes, croisements, virages, pont, lampadaires, panneaux et zone de chantier sont disposés dans une grande grille jouable afin de tester le kit depuis le sol ou avec le chasseur.',
     sky: 0x6f9fbd, fog: 0xb8cbd2, fogDensity: 0.00055, waterLevel: -80,
     terrain: { kind: 'plains', base: 0, amplitude: 0, scale: 0.004, low: 0x4f6a4c, mid: 0x4f6a4c, high: 0x4f6a4c },
     layout: 'object-lab', population: { trees: 0, rocks: 0, buildings: 0, towers: 0, crystals: 0 },
     landmarks: [], assets: KENNEY_ROAD_PLACEMENTS,
-    spawn: { ground: [0, 0, 340], air: [0, 105, 430] }, mission: 'Inspection du nouveau kit routier',
+    spawn: { ground: [0, 0, 440], air: [0, 115, 520] }, mission: 'Inspection du nouveau kit routier',
     objectives: ['Parcourir les 72 objets 3D', 'Traverser le rond-point et le pont', 'Inspecter la zone de chantier'], modes: allModes
   }
 ];

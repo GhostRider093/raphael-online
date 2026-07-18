@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from '../libs/GLTFLoader.js';
-import { ASSET_LIBRARY } from './world-catalog.js?v=kenney-road-lab-20260718';
+import { ASSET_LIBRARY } from './world-catalog.js?v=kenney-road-city-20260718';
 
 const loader = new GLTFLoader();
 const assetCache = new Map();
