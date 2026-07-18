@@ -1,5 +1,5 @@
 // ==========================================================================
-//  COMBAT  -  mode tir : cibles au sol + missiles + viseur
+//  COMBAT  -  mode tir : cibles au sol + canon continu + viseur
 // --------------------------------------------------------------------------
 //  Actif uniquement en vol (chasseur / fly). Auto-branche sur le moteur :
 //  lit les globaux scene, player, keys, gameStarted, isFlyingMode(), camera,
@@ -10,13 +10,13 @@
 // ==========================================================================
 (function () {
   const TARGET_COUNT   = 8;
-  const MISSILE_SPEED  = 160;   // unites / s
-  const MISSILE_LIFE   = 3.0;   // s
-  const HIT_RADIUS     = 7;     // generosite de visee
-  const FIRE_COOLDOWN  = 0.35;  // s entre deux tirs
+  const CANNON_SPEED   = 420;   // unites / s
+  const CANNON_LIFE    = 1.35;  // s
+  const HIT_RADIUS     = 5;     // generosite de visee
+  const FIRE_INTERVAL  = 0.075; // environ 13 obus / s
 
   let targets = [];
-  let missiles = [];
+  let cannonRounds = [];
   let explosions = [];
   let active = false;
   let prevFire = false;
@@ -25,9 +25,104 @@
   let score = 0;
   let crosshair = null, hudEl = null;
   let mouseFire = false;
+  let cannonAudio = null;
 
   document.addEventListener("mousedown", e => { if (e.button === 0) mouseFire = true; });
   document.addEventListener("mouseup",   e => { if (e.button === 0) mouseFire = false; });
+  window.addEventListener("blur", () => { mouseFire = false; stopCannonAudio(); });
+
+  // Son de canon continu : bruit filtre et deux couches mecaniques graves.
+  function ensureCannonAudio() {
+    if (cannonAudio) return cannonAudio;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+
+    const context = new AudioContextClass();
+    const compressor = context.createDynamicsCompressor();
+    compressor.threshold.value = -18;
+    compressor.knee.value = 12;
+    compressor.ratio.value = 8;
+    compressor.attack.value = 0.002;
+    compressor.release.value = 0.12;
+    compressor.connect(context.destination);
+
+    const master = context.createGain();
+    master.gain.value = 0.0001;
+    master.connect(compressor);
+
+    const noiseBuffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseData.length; i++) {
+      noiseData[i] = (Math.random() * 2 - 1) * (0.65 + Math.random() * 0.35);
+    }
+    const noise = context.createBufferSource();
+    noise.buffer = noiseBuffer;
+    noise.loop = true;
+    const noiseFilter = context.createBiquadFilter();
+    noiseFilter.type = "bandpass";
+    noiseFilter.frequency.value = 1150;
+    noiseFilter.Q.value = 0.7;
+    noise.connect(noiseFilter).connect(master);
+
+    const rumble = context.createOscillator();
+    rumble.type = "sawtooth";
+    rumble.frequency.value = 58;
+    const rumbleGain = context.createGain();
+    rumbleGain.gain.value = 0.45;
+    rumble.connect(rumbleGain).connect(master);
+
+    const mechanical = context.createOscillator();
+    mechanical.type = "square";
+    mechanical.frequency.value = 116;
+    const mechanicalGain = context.createGain();
+    mechanicalGain.gain.value = 0.12;
+    mechanical.connect(mechanicalGain).connect(master);
+
+    noise.start();
+    rumble.start();
+    mechanical.start();
+    cannonAudio = { context, master, firing: false };
+    return cannonAudio;
+  }
+
+  function startCannonAudio() {
+    const audio = ensureCannonAudio();
+    if (!audio) return;
+    if (audio.context.state === "suspended") audio.context.resume();
+    if (audio.firing) return;
+    audio.firing = true;
+    const now = audio.context.currentTime;
+    audio.master.gain.cancelScheduledValues(now);
+    audio.master.gain.setValueAtTime(Math.max(0.0001, audio.master.gain.value), now);
+    audio.master.gain.exponentialRampToValueAtTime(0.42, now + 0.018);
+  }
+
+  function pulseCannonAudio() {
+    if (!cannonAudio) return;
+    const now = cannonAudio.context.currentTime;
+    cannonAudio.master.gain.cancelScheduledValues(now);
+    cannonAudio.master.gain.setValueAtTime(0.22, now);
+    cannonAudio.master.gain.linearRampToValueAtTime(0.48, now + 0.006);
+    cannonAudio.master.gain.exponentialRampToValueAtTime(0.22, now + FIRE_INTERVAL * 0.86);
+  }
+
+  function stopCannonAudio() {
+    if (!cannonAudio || !cannonAudio.firing) return;
+    cannonAudio.firing = false;
+    const now = cannonAudio.context.currentTime;
+    cannonAudio.master.gain.cancelScheduledValues(now);
+    cannonAudio.master.gain.setValueAtTime(Math.max(0.0001, cannonAudio.master.gain.value), now);
+    cannonAudio.master.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+  }
+
+  // Debloque WebAudio sur la premiere interaction utilisateur. Certains
+  // navigateurs bloquent sinon tous les sons, meme lorsque le tir fonctionne.
+  function unlockCannonAudio() {
+    const audio = ensureCannonAudio();
+    if (audio && audio.context.state === "suspended") audio.context.resume();
+  }
+  window.addEventListener("pointerdown", unlockCannonAudio, { passive: true });
+  window.addEventListener("keydown", unlockCannonAudio, { passive: true });
 
   function ready() {
     return typeof scene !== "undefined" && scene &&
@@ -116,39 +211,37 @@
   }
 
   // ── MISSILES ──────────────────────────────────────────────────────────────
-  function fireMissile() {
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion).normalize();
+  function fireCannonRound() {
+    // Le tangage visuel du modele OBJ est inverse. Les obus suivent donc la
+    // trajectoire reelle de l'avion plutot que son axe graphique local.
+    const hasFlightVelocity = typeof velocity !== "undefined" && velocity &&
+      Number.isFinite(velocity.x) && Number.isFinite(velocity.y) && Number.isFinite(velocity.z) &&
+      Math.hypot(velocity.x, velocity.y, velocity.z) > 0.001;
+    const fwd = hasFlightVelocity
+      ? new THREE.Vector3(velocity.x, velocity.y, velocity.z).normalize()
+      : new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion).normalize();
     const start = player.position.clone().addScaledVector(fwd, 4);
-    const body = new THREE.Group();
-    const tube = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.22, 2, 10),
-      new THREE.MeshStandardMaterial({ color: 0x202428, metalness: 0.6, roughness: 0.4 })
+    const tracer = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.055, 0.085, 2.8, 6),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd85a,
+        transparent: true,
+        opacity: 0.96,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
     );
-    tube.rotation.x = Math.PI / 2;           // longueur le long de Z
-    body.add(tube);
-    const nose = new THREE.Mesh(
-      new THREE.ConeGeometry(0.22, 0.7, 10),
-      new THREE.MeshStandardMaterial({ color: 0xd23a2a, metalness: 0.4, roughness: 0.5 })
-    );
-    nose.rotation.x = -Math.PI / 2;
-    nose.position.z = -1.3;                   // pointe vers l'avant (-Z)
-    body.add(nose);
-    const flame = new THREE.Mesh(
-      new THREE.ConeGeometry(0.2, 1.1, 10, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xffae2e, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
-    );
-    flame.rotation.x = Math.PI / 2;
-    flame.position.z = 1.3;                   // arriere (+Z)
-    body.add(flame);
-    body.position.copy(start);
-    body.quaternion.copy(player.quaternion);
-    scene.add(body);
-    missiles.push({ mesh: body, vel: fwd.multiplyScalar(MISSILE_SPEED), life: MISSILE_LIFE });
+    tracer.rotation.x = Math.PI / 2;
+    tracer.position.copy(start);
+    tracer.quaternion.copy(player.quaternion);
+    scene.add(tracer);
+    cannonRounds.push({ mesh: tracer, vel: fwd.multiplyScalar(CANNON_SPEED), life: CANNON_LIFE });
+    pulseCannonAudio();
   }
 
-  function updateMissiles(dt) {
-    for (let i = missiles.length - 1; i >= 0; i--) {
-      const m = missiles[i];
+  function updateCannonRounds(dt) {
+    for (let i = cannonRounds.length - 1; i >= 0; i--) {
+      const m = cannonRounds[i];
       m.mesh.position.addScaledVector(m.vel, dt);
       m.life -= dt;
       let dead = m.life <= 0;
@@ -165,7 +258,7 @@
           }
         }
       }
-      if (dead) { scene.remove(m.mesh); missiles.splice(i, 1); }
+      if (dead) { scene.remove(m.mesh); cannonRounds.splice(i, 1); }
     }
   }
 
@@ -214,8 +307,9 @@
   function stop() {
     active = false;
     targets.forEach(t => scene.remove(t.mesh)); targets = [];
-    missiles.forEach(m => scene.remove(m.mesh)); missiles = [];
+    cannonRounds.forEach(m => scene.remove(m.mesh)); cannonRounds = [];
     explosions.forEach(e => scene.remove(e.mesh)); explosions = [];
+    stopCannonAudio();
     hideCrosshair();
   }
 
@@ -233,14 +327,19 @@
 
     const gamepadFire = typeof isFlightGamepadFirePressed === "function" && isFlightGamepadFirePressed();
     const fireKey = (typeof keys !== "undefined" && keys && keys["Space"]) || mouseFire || gamepadFire;
-    if (fireKey && fireTimer <= 0) { fireMissile(); fireTimer = FIRE_COOLDOWN; }
+    if (fireKey) startCannonAudio();
+    else stopCannonAudio();
+    if (fireKey && fireTimer <= 0) {
+      fireCannonRound();
+      fireTimer = FIRE_INTERVAL;
+    }
     prevFire = fireKey;
 
     // anime les cibles (rotation anneau + pulse)
     const t = now * 0.001;
     targets.forEach(tg => { if (tg.ring) tg.ring.rotation.z += dt * 1.5; if (tg.orb) tg.orb.material.emissiveIntensity = 0.6 + Math.sin(t * 4) * 0.3; });
 
-    updateMissiles(dt);
+    updateCannonRounds(dt);
     updateExplosions(dt);
   }
   loop();

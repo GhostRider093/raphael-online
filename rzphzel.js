@@ -27,6 +27,8 @@ let isSinking = false;
 let sinkTimer = 0;
 let sinkStart = { x: 0, y: 0, z: 0 };
 let mapEditor = null;
+let valleyPortal = null;
+let valleyPortalTriggered = false;
 
 // â”€â”€ CAMÃ‰RA LIBRE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let cameraYaw   = 0;    // angle orbital horizontal (0 = derriÃ¨re le joueur)
@@ -45,6 +47,7 @@ const FRICTION_G  = 0.93;
 const TURN_SPD    = 0.048;
 
 let flightPitch = 0;
+let flightVisualPitch = 0;
 let flightSpeed = 0;
 let flightGamepadIndex = null;
 let flightGamepadStatus = "manette non detectee";
@@ -291,6 +294,95 @@ function isFlyingMode(mode){
   return activeMode === "fly" || activeMode === "chasseur" || activeMode === "wargun";
 }
 
+function createValleyPortal() {
+  const portal = new THREE.Group();
+  portal.position.set(0, 48, -172);
+
+  const outerRing = new THREE.Mesh(
+    new THREE.TorusGeometry(10, 1.15, 16, 64),
+    new THREE.MeshBasicMaterial({
+      color: 0x52e5ff,
+      transparent: true,
+      opacity: 0.92,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  const innerRing = new THREE.Mesh(
+    new THREE.TorusGeometry(7.6, 0.34, 12, 48),
+    new THREE.MeshBasicMaterial({
+      color: 0xb76cff,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  const energy = new THREE.Mesh(
+    new THREE.CircleGeometry(8.7, 48),
+    new THREE.MeshBasicMaterial({
+      color: 0x258dff,
+      transparent: true,
+      opacity: 0.22,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  energy.position.z = 0.05;
+  portal.add(outerRing, innerRing, energy);
+  portal.userData.outerRing = outerRing;
+  portal.userData.innerRing = innerRing;
+  portal.userData.energy = energy;
+  scene.add(portal);
+  valleyPortal = portal;
+}
+
+function showValleyLoadingTransition() {
+  let overlay = document.getElementById("world-transition");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "world-transition";
+    Object.assign(overlay.style, {
+      position: "fixed",
+      inset: "0",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "18px",
+      background: "radial-gradient(circle, rgba(30,132,255,.72), rgba(3,8,24,.98) 68%)",
+      color: "#dffaff",
+      font: "700 28px monospace",
+      letterSpacing: "4px",
+      textAlign: "center",
+      zIndex: "9999",
+      opacity: "0",
+      transition: "opacity .28s ease"
+    });
+    overlay.innerHTML = '<div>TRANSFERT VERS LA VALLÉE</div><div style="font-size:14px;letter-spacing:2px;opacity:.8">CHARGEMENT DU SECTEUR...</div>';
+    document.body.appendChild(overlay);
+  }
+  requestAnimationFrame(() => { overlay.style.opacity = "1"; });
+}
+
+function updateValleyPortal(delta, now) {
+  if (!valleyPortal || valleyPortalTriggered) return;
+  valleyPortal.rotation.z += delta * 0.55;
+  valleyPortal.userData.innerRing.rotation.z -= delta * 1.4;
+  const pulse = 1 + Math.sin(now * 0.004) * 0.055;
+  valleyPortal.scale.setScalar(pulse);
+  valleyPortal.userData.energy.material.opacity = 0.18 + Math.sin(now * 0.006) * 0.07;
+
+  if (!player || player.position.distanceTo(valleyPortal.position) > 12) return;
+  valleyPortalTriggered = true;
+  valleyPortal.visible = false;
+  showValleyLoadingTransition();
+  setTimeout(() => {
+    window.location.href = "vallee.html?mode=chasseur&from=city";
+  }, 900);
+}
+
 function start(mode){
   if (gameStarted) return;
   gameStarted = true;
@@ -424,6 +516,7 @@ function init(){
     cameraPitch = 0.22;
     cameraZoom = 22;
     flightPitch = 0;
+    flightVisualPitch = 0;
     flightSpeed = FLIGHT_CRUISE_SPEED;
     flightGamepadIndex = null;
     flightGamepadStatus = "manette non detectee";
@@ -503,6 +596,8 @@ function init(){
   const dustMat = new THREE.PointsMaterial({ color: 0xc8b896, size: 0.22, transparent: true, opacity: 0 });
   dustParticles = new THREE.Points(dustGeo, dustMat);
   scene.add(dustParticles);
+
+  createValleyPortal();
 
   animate();
 
@@ -3208,7 +3303,8 @@ function updateFlyoverMode(delta) {
   if (keys["ArrowDown"] || keys["KeyK"]) pitchInput -= 1;
 
   let climbInput = 0;
-  if (keys["Space"] || keys["KeyE"] || keys["PageUp"]) climbInput += 1;
+  // Espace est reserve au canon. E/PageUp commandent la montee directe.
+  if (keys["KeyE"] || keys["PageUp"]) climbInput += 1;
   if (keys["ControlLeft"] || keys["ControlRight"] || keys["KeyC"] || keys["PageDown"]) climbInput -= 1;
 
   const gamepad = findFlightGamepad();
@@ -3288,10 +3384,12 @@ function updateFlyoverMode(delta) {
   if (keyboardBrake) targetSpeed = 0;
   if (isBoost) targetSpeed *= 1.25;
 
+  const combatFlightMods = window.RaphaelAirCombat ? window.RaphaelAirCombat.flightModifiers() : { speed: 1, yaw: 1 };
+  targetSpeed *= combatFlightMods.speed;
   flightSpeed += (targetSpeed - flightSpeed) * Math.min(1, delta * FLIGHT_ACCEL_RATE);
   if (Math.abs(flightSpeed) < 0.05) flightSpeed = 0;
 
-  playerYaw += yawInput * FLIGHT_YAW_RATE * delta;
+  playerYaw += yawInput * FLIGHT_YAW_RATE * combatFlightMods.yaw * delta;
   flightPitch = clampValue(flightPitch + pitchInput * FLIGHT_PITCH_RATE * delta, -0.48, 0.52);
 
   const cosPitch = Math.cos(flightPitch);
@@ -3301,8 +3399,10 @@ function updateFlyoverMode(delta) {
     -Math.cos(playerYaw) * cosPitch
   );
 
-  player.position.addScaledVector(forward, flightSpeed * delta);
-  player.position.y += climbInput * 30 * delta;
+  const verticalSpeed = forward.y * flightSpeed + climbInput * 30;
+  player.position.x += forward.x * flightSpeed * delta;
+  player.position.y += verticalSpeed * delta;
+  player.position.z += forward.z * flightSpeed * delta;
   player.position.x = clampValue(player.position.x, -FLIGHT_WORLD_LIMIT, FLIGHT_WORLD_LIMIT);
   player.position.z = clampValue(player.position.z, -FLIGHT_WORLD_LIMIT, FLIGHT_WORLD_LIMIT);
   player.position.y = clampValue(player.position.y, FLIGHT_MIN_ALTITUDE, FLIGHT_MAX_ALTITUDE);
@@ -3310,14 +3410,18 @@ function updateFlyoverMode(delta) {
   if (player.position.y <= FLIGHT_MIN_ALTITUDE + 0.01) flightPitch = Math.max(0, flightPitch);
   if (player.position.y >= FLIGHT_MAX_ALTITUDE - 0.01) flightPitch = Math.min(0, flightPitch);
 
+  const horizontalSpeed = Math.max(0.001, Math.hypot(forward.x * flightSpeed, forward.z * flightSpeed));
+  const trajectoryPitch = clampValue(Math.atan2(verticalSpeed, horizontalSpeed), -0.62, 0.62);
+  flightVisualPitch += (trajectoryPitch - flightVisualPitch) * Math.min(1, delta * 6.5);
   const bank = yawInput * 0.45;   // inverse : ailes inclinees dans le bon sens
-  player.rotation.set(flightPitch, playerYaw, bank);
+  // Le modele OBJ a son axe de tangage visuel inverse par rapport au repere de vol.
+  player.rotation.set(-flightVisualPitch, playerYaw, bank);
   if (player.userData.propeller) {
     player.userData.propeller.rotation.z += delta * (22 + Math.abs(flightSpeed) * 0.85);
   }
 
   velocity.x = forward.x * flightSpeed;
-  velocity.y = forward.y * flightSpeed + climbInput * 30;
+  velocity.y = verticalSpeed;
   velocity.z = forward.z * flightSpeed;
   speed = clampValue(Math.abs(flightSpeed) / FLIGHT_MAX_SPEED * MAX_SPEED, 0, MAX_BOOST);
   scooterState = "SURVOL";
@@ -3329,6 +3433,8 @@ function updateFlyoverMode(delta) {
     .add(new THREE.Vector3(0, camHeight, 0));
   camera.position.lerp(desiredCamera, Math.min(1, delta * 4.8));
   camera.lookAt(player.position.clone().addScaledVector(forward, 28).add(new THREE.Vector3(0, 2.2, 0)));
+
+  updateValleyPortal(delta, performance.now());
 
   updateFlightHud();
   renderer.render(scene, camera);
