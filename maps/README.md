@@ -39,6 +39,7 @@ Double-cliquer sur `Lancer_mondes.bat`, puis choisir un monde et un pilote. On p
 - Clavier : `ZQSD` ou flèches pour se déplacer, `Espace` pour monter ou sauter, `Maj` pour accélérer, `V` pour changer de caméra et `Échap` pour revenir au catalogue.
 - Manette : stick gauche pour diriger, gâchettes pour l'accélération ou l'altitude, bouton principal pour sauter, bouton secondaire pour accélérer et bouton supérieur pour la caméra.
 - Mobile : joystick tactile à gauche et boutons contextuels à droite. Les commandes occupent les zones basses de l'écran et tiennent compte des marges de sécurité des téléphones.
+- Smartphone : le bouton `INCLINAISON` active l'accéléromètre/gyroscope après autorisation du navigateur. Le bouton `JOYSTICK` masque la commande gauche et `JOYSTICK +` la réaffiche à tout moment.
 - Portail : traversez l’anneau pour un passage automatique. À moins de 70 mètres, maintenez `E`, le bouton manette secondaire/épaule ou le bouton tactile `PORTAIL` pour l’activer à distance.
 - Combat aérien : une cible ennemie mobile est détectée par le radar dans chaque map jouée avec le chasseur. Alignez le losange dans le viseur jusqu’à `TIR AUTORISÉ`, puis tirez avec `F`/`Espace` pour le canon ou `G`/`M` pour le missile. Sur mobile, utilisez `CANON` et `MISSILE`; à la manette, le bouton principal tire au canon et le bouton latéral gauche lance le missile.
 - Son : le réacteur et les bruitages de verrouillage, canon, missile et explosion démarrent après la première commande, conformément à la règle d’activation audio des navigateurs.

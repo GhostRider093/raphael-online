@@ -379,6 +379,7 @@ function startWorld() {
 
   const keys = {};
   const touch = { x: 0, y: 0, boost: false, jump: false, portal: false, fire: false, missile: false };
+  const motion = { enabled: false, x: 0, y: 0, neutralBeta: 0, neutralGamma: 0, hasSample: false };
   // Tous les points de départ sont placés au sud de la zone jouable : le pilote
   // doit donc regarder vers le centre de la carte au lancement.
   let yaw = 0, pitch = 0, speed = mode.type === 'flight' ? 35 : 0, verticalVelocity = 0, cameraWide = false, lastView = false;
@@ -471,6 +472,10 @@ function startWorld() {
 
   const stick = document.getElementById('world-stick');
   const knob = document.getElementById('world-knob');
+  const touchLayer = document.getElementById('world-touch');
+  const stickToggle = document.getElementById('stick-toggle');
+  const motionToggle = document.getElementById('motion-toggle');
+  const motionState = document.getElementById('motion-state');
   let pointerId = null;
   function moveStick(event) {
     const rect = stick.getBoundingClientRect(), max = rect.width * .34;
@@ -484,6 +489,74 @@ function startWorld() {
   stick.addEventListener('pointermove', event => { if (event.pointerId === pointerId) moveStick(event); });
   stick.addEventListener('pointerup', event => { if (event.pointerId === pointerId) resetStick(); });
   stick.addEventListener('pointercancel', resetStick);
+
+  let stickVisible = true;
+  try { stickVisible = localStorage.getItem('raphael.mobile.stick') !== 'hidden'; } catch {}
+  function renderStickVisibility() {
+    touchLayer.classList.toggle('stick-hidden', !stickVisible);
+    stickToggle.classList.toggle('active', stickVisible);
+    stickToggle.textContent = stickVisible ? 'JOYSTICK' : 'JOYSTICK +';
+    if (!stickVisible) resetStick();
+  }
+  stickToggle.addEventListener('click', event => {
+    event.preventDefault();
+    stickVisible = !stickVisible;
+    try { localStorage.setItem('raphael.mobile.stick', stickVisible ? 'visible' : 'hidden'); } catch {}
+    renderStickVisibility();
+  });
+  renderStickVisibility();
+
+  function orientationAngle() {
+    const angle = screen.orientation?.angle ?? window.orientation ?? 0;
+    return ((Number(angle) % 360) + 360) % 360;
+  }
+
+  function handleDeviceOrientation(event) {
+    if (!motion.enabled || !Number.isFinite(event.beta) || !Number.isFinite(event.gamma)) return;
+    if (!motion.hasSample) {
+      motion.neutralBeta = event.beta;
+      motion.neutralGamma = event.gamma;
+      motion.hasSample = true;
+    }
+    const beta = event.beta - motion.neutralBeta;
+    const gamma = event.gamma - motion.neutralGamma;
+    const angle = orientationAngle();
+    let horizontal = gamma, vertical = beta;
+    if (angle === 90) { horizontal = beta; vertical = -gamma; }
+    else if (angle === 270) { horizontal = -beta; vertical = gamma; }
+    else if (angle === 180) { horizontal = -gamma; vertical = -beta; }
+    const targetX = THREE.MathUtils.clamp(horizontal / 24, -1, 1);
+    const targetY = THREE.MathUtils.clamp(vertical / 28, -1, 1);
+    motion.x += (targetX - motion.x) * .28;
+    motion.y += (targetY - motion.y) * .28;
+    motionState.textContent = 'Inclinaison active';
+  }
+  window.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });
+
+  async function toggleMotionControls() {
+    if (motion.enabled) {
+      motion.enabled = false;
+      motion.x = motion.y = 0;
+      motion.hasSample = false;
+      motionToggle.classList.remove('active');
+      motionState.textContent = 'Inclinaison inactive';
+      return;
+    }
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const permission = await DeviceOrientationEvent.requestPermission();
+        if (permission !== 'granted') throw new Error('permission refusée');
+      }
+      if (typeof DeviceOrientationEvent === 'undefined') throw new Error('capteur indisponible');
+      motion.enabled = true;
+      motion.hasSample = false;
+      motionToggle.classList.add('active');
+      motionState.textContent = 'Bougez le téléphone pour calibrer';
+    } catch (error) {
+      motionState.textContent = `Inclinaison : ${error.message || 'indisponible'}`;
+    }
+  }
+  motionToggle.addEventListener('click', event => { event.preventDefault(); void toggleMotionControls(); });
   document.querySelectorAll('[data-world-touch]').forEach(button => {
     const action = button.dataset.worldTouch;
     let missileTapTimer = null;
@@ -513,8 +586,8 @@ function startWorld() {
   });
 
   function updateFlight(dt, pad) {
-    const yawInput = (keys.ArrowLeft || keys.KeyA || keys.KeyQ ? 1 : 0) + (keys.ArrowRight || keys.KeyD ? -1 : 0) - touch.x - pad.x;
-    const pitchInput = (keys.ArrowUp || keys.KeyI ? 1 : 0) + (keys.ArrowDown || keys.KeyK ? -1 : 0) + touch.y + pad.y;
+    const yawInput = (keys.ArrowLeft || keys.KeyA || keys.KeyQ ? 1 : 0) + (keys.ArrowRight || keys.KeyD ? -1 : 0) - touch.x - motion.x - pad.x;
+    const pitchInput = (keys.ArrowUp || keys.KeyI ? 1 : 0) + (keys.ArrowDown || keys.KeyK ? -1 : 0) + touch.y + motion.y + pad.y;
     let targetSpeed = 38;
     if (keys.KeyW || keys.KeyZ || touch.boost) targetSpeed = 72;
     if (keys.KeyS || pad.brake > .1) targetSpeed = 12;
@@ -540,8 +613,8 @@ function startWorld() {
   }
 
   function updateGround(dt, pad) {
-    const turn = (keys.ArrowLeft || keys.KeyA || keys.KeyQ ? 1 : 0) + (keys.ArrowRight || keys.KeyD ? -1 : 0) - touch.x - pad.x;
-    const forwardInput = (keys.ArrowUp || keys.KeyW || keys.KeyZ ? 1 : 0) + (keys.ArrowDown || keys.KeyS ? -1 : 0) - touch.y - pad.y;
+    const turn = (keys.ArrowLeft || keys.KeyA || keys.KeyQ ? 1 : 0) + (keys.ArrowRight || keys.KeyD ? -1 : 0) - touch.x - motion.x - pad.x;
+    const forwardInput = (keys.ArrowUp || keys.KeyW || keys.KeyZ ? 1 : 0) + (keys.ArrowDown || keys.KeyS ? -1 : 0) - touch.y - motion.y - pad.y;
     const boost = keys.ShiftLeft || keys.ShiftRight || touch.boost || pad.boost;
     const maxSpeed = mode.id === 'robot' ? (boost ? 30 : 18) : (boost ? 22 : 12);
     speed += (THREE.MathUtils.clamp(forwardInput, -1, 1) * maxSpeed - speed) * Math.min(1, dt * 6);
@@ -665,6 +738,13 @@ function startWorld() {
       finished: raceFinished,
       elapsed: raceElapsed,
       best: raceBest
+    }),
+    mobile: () => ({
+      stickVisible,
+      motionEnabled: motion.enabled,
+      motionX: motion.x,
+      motionY: motion.y,
+      motionCalibrated: motion.hasSample
     }),
     teleportToRaceGate: () => {
       const gate = raceGates[raceIndex];
