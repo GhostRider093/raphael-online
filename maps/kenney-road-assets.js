@@ -40,7 +40,10 @@ export const KENNEY_ROAD_LIBRARY = Object.fromEntries(KENNEY_ROAD_FILES.map(file
   }];
 }));
 
-const place = (file, x, z, rotation = 0, scale = 1) => ({ key: keyFor(file), x, z, rotation, scale });
+const KENNEY_AXIS_CORRECTION = Math.PI / 2;
+const place = (file, x, z, rotation = 0, scale = 1) => ({
+  key: keyFor(file), x, z, rotation: rotation + KENNEY_AXIS_CORRECTION, scale
+});
 
 // Un vrai quadrillage routier dense : trois avenues nord/sud croisent trois
 // avenues est/ouest. Les morceaux sont jointifs et visibles dès le départ.

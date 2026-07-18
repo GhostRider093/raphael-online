@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from '../libs/GLTFLoader.js';
-import { WORLD_MAPS, PLAYER_MODES, getWorld, getMode, getPortalRoute } from './world-catalog.js?v=kenney-road-city-20260718';
-import { buildWorld, animateWorld } from './world-builder.js?v=kenney-road-city-20260718';
+import { WORLD_MAPS, PLAYER_MODES, getWorld, getMode, getPortalRoute } from './world-catalog.js?v=kenney-road-axis-20260718';
+import { buildWorld, animateWorld } from './world-builder.js?v=kenney-road-axis-20260718';
 import { createWorldCombat } from './world-combat.js?v=lock-rules-20260718';
 
 const params = new URLSearchParams(location.search);
