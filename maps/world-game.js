@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../libs/GLTFLoader.js';
 import { WORLD_MAPS, PLAYER_MODES, getWorld, getMode, getPortalRoute } from './world-catalog.js';
 import { buildWorld, animateWorld } from './world-builder.js';
-import { createWorldCombat } from './world-combat.js';
+import { createWorldCombat } from './world-combat.js?v=lock-rules-20260718';
 
 const params = new URLSearchParams(location.search);
 const requestedMap = params.get('map');
@@ -395,6 +395,37 @@ function startWorld() {
     getForward: getFlightForward,
     getSpeed: () => speed
   });
+
+  const mobileLayout = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
+  if (mobileLayout) {
+    const game = document.getElementById('game');
+    const infoDrawer = document.getElementById('mobile-info-drawer');
+    const infoToggle = document.getElementById('mobile-info-toggle');
+    ['game-hud', 'mission-panel', 'race-panel', 'combat-panel'].forEach(id => {
+      const panel = document.getElementById(id);
+      if (panel) infoDrawer.appendChild(panel);
+    });
+    const setInfoOpen = open => {
+      game.classList.toggle('mobile-info-open', open);
+      infoDrawer.setAttribute('aria-hidden', String(!open));
+      infoToggle.setAttribute('aria-expanded', String(open));
+      infoToggle.textContent = open ? 'INFOS −' : 'INFOS +';
+    };
+    infoToggle.addEventListener('click', event => {
+      event.preventDefault();
+      setInfoOpen(!game.classList.contains('mobile-info-open'));
+    });
+    setInfoOpen(false);
+
+    let fullscreenRequested = false;
+    document.addEventListener('pointerdown', () => {
+      if (fullscreenRequested || document.fullscreenElement) return;
+      fullscreenRequested = true;
+      const root = document.documentElement;
+      const request = root.requestFullscreen || root.webkitRequestFullscreen;
+      if (request) Promise.resolve(request.call(root, { navigationUI: 'hide' })).catch(() => {});
+    }, { passive: true, once: true });
+  }
 
   const raceGates = built.raceGates || [];
   const raceEnabled = mode.type === 'flight' && raceGates.length > 0;

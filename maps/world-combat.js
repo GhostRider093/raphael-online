@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const LOCK_ACQUIRE_TIME = .72;
+const LOCK_ACQUIRE_TIME = 2.1;
 const LOCK_CAPTURE_RADIUS = 60;
 const LOCK_RELEASE_RADIUS = 92;
 const BULLET_SPEED = 560;
@@ -65,6 +65,7 @@ function createAudioSystem(audioStateElement) {
   let engineGain = null;
   let engineLow = null;
   let engineHigh = null;
+  let nextAcquireBeep = 0;
 
   function ensure() {
     if (!context) {
@@ -151,9 +152,27 @@ function createAudioSystem(audioStateElement) {
     });
   }
 
+  function acquire(progress) {
+    const c = ensure();
+    if (!c || c.currentTime < nextAcquireBeep) return;
+    const normalized = THREE.MathUtils.clamp(progress, 0, 1);
+    nextAcquireBeep = c.currentTime + THREE.MathUtils.lerp(.42, .13, normalized);
+    const oscillator = c.createOscillator();
+    const gain = c.createGain();
+    oscillator.type = 'square';
+    oscillator.frequency.value = 620 + normalized * 260;
+    gain.gain.setValueAtTime(.0001, c.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.2, c.currentTime + .012);
+    gain.gain.exponentialRampToValueAtTime(.0001, c.currentTime + .105);
+    oscillator.connect(gain);
+    gain.connect(c.destination);
+    oscillator.start();
+    oscillator.stop(c.currentTime + .115);
+  }
+
   document.addEventListener('keydown', ensure, { passive: true });
   document.addEventListener('pointerdown', ensure, { passive: true });
-  return { ensure, updateEngine, gun, missile, explosion, lock, isActive: () => !!context };
+  return { ensure, updateEngine, gun, missile, explosion, lock, acquire, isActive: () => !!context };
 }
 
 export function createWorldCombat({ scene, camera, player, world, mode, getHeight, getForward, getSpeed }) {
@@ -200,8 +219,6 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
   let deniedUntil = 0;
   let gunCooldown = 0;
   let previousMissile = false;
-  let missileQueued = false;
-  let missileQueueUntil = 0;
   let missilesLeft = 4;
   let score = 0;
 
@@ -268,13 +285,13 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     bullets.push({ mesh, velocity: direction.multiplyScalar(BULLET_SPEED), life: 2.3 });
   }
 
-  function denyMissile(queued = false) {
+  function denyMissile() {
     deniedUntil = performance.now() + 750;
     reticle.classList.remove('denied');
     void reticle.offsetWidth;
     reticle.classList.add('denied');
     lockState.className = 'locked';
-    lockState.textContent = queued ? 'MAINTENEZ MISSILE · ACQUISITION' : 'MISSILE BLOQUÉ · ALIGNEZ LE LOSANGE';
+    lockState.textContent = 'MISSILE NON GUIDÉ · CIBLE NON VERROUILLÉE';
   }
 
   function spawnMissileSmoke(position) {
@@ -287,14 +304,15 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     missileSmoke.push({ mesh: puff, life: .72, maxLife: .72 });
   }
 
-  function fireMissile() {
+  function fireMissile(forceGuided) {
     if (!enemy.alive) return false;
     if (missilesLeft <= 0) {
       lockState.className = 'locked';
       lockState.textContent = 'PLUS DE MISSILES';
       return false;
     }
-    if (!locked) { denyMissile(); return false; }
+    const guided = forceGuided ?? locked;
+    if (!guided) denyMissile();
     audio.missile();
     const mountedMissile = (player.userData.missileRacks || []).find(item => item.visible);
     const launchPosition = player.position.clone();
@@ -314,7 +332,7 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     flame.position.z = 2.3;
     body.add(flame);
     scene.add(body);
-    missiles.push({ mesh: body, velocity: direction.multiplyScalar(125), life: 9, trailClock: 0 });
+    missiles.push({ mesh: body, velocity: direction.multiplyScalar(125), life: 9, trailClock: 0, guided });
     return true;
   }
 
@@ -373,16 +391,18 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     const scale = Math.min(1, maxRange / Math.max(1, distance));
     const rightAmount = offset.dot(right) * scale / maxRange;
     const forwardAmount = offset.dot(forward) * scale / maxRange;
-    radarTarget.style.left = `${50 + THREE.MathUtils.clamp(rightAmount, -.44, .44) * 100}%`;
-    radarTarget.style.top = `${50 - THREE.MathUtils.clamp(forwardAmount, -.44, .44) * 100}%`;
+    const acquiring = lockProgress > 0 && !locked;
+    const wobbleX = acquiring ? Math.sin(performance.now() * .027) * 2.8 : 0;
+    const wobbleY = acquiring ? Math.cos(performance.now() * .021) * 2.2 : 0;
+    radarTarget.style.left = `${50 + THREE.MathUtils.clamp(rightAmount, -.44, .44) * 100 + wobbleX}%`;
+    radarTarget.style.top = `${50 - THREE.MathUtils.clamp(forwardAmount, -.44, .44) * 100 + wobbleY}%`;
   }
 
   function updateLock(dt) {
     if (!enemy.alive) return;
     const aim = projectTarget();
     const forced = performance.now() < forcedLockUntil;
-    const captureRadius = missileQueued ? 280 : LOCK_CAPTURE_RADIUS;
-    const insideCapture = !!(aim?.visible && aim.screen <= captureRadius);
+    const insideCapture = !!(aim?.visible && aim.screen <= LOCK_CAPTURE_RADIUS);
     const retain = !!(locked && aim?.visible && aim.screen <= LOCK_RELEASE_RADIUS);
     if (forced && enemy.alive) {
       locked = true;
@@ -399,6 +419,7 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     }
 
     if (locked && !lockAnnounced) audio.lock();
+    if (insideCapture && !locked) audio.acquire(lockProgress / LOCK_ACQUIRE_TIME);
     lockAnnounced = locked;
     reticle.classList.toggle('locked', locked);
     reticle.classList.toggle('acquiring', insideCapture && !locked);
@@ -468,13 +489,13 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
         spawnMissileSmoke(missile.mesh.position);
         missile.trailClock = .035;
       }
-      if (enemy.alive) {
+      if (missile.guided && enemy.alive) {
         const desired = targetPoint().sub(missile.mesh.position).normalize();
         missile.velocity.lerp(desired.multiplyScalar(280), Math.min(1, dt * 3.5));
       }
       missile.mesh.position.addScaledVector(missile.velocity, dt);
       if (missile.velocity.lengthSq() > 1) missile.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), missile.velocity.clone().normalize());
-      const hit = enemy.alive && missile.mesh.position.distanceTo(targetPoint()) < enemy.radius + 2;
+      const hit = missile.guided && enemy.alive && missile.mesh.position.distanceTo(targetPoint()) < enemy.radius + 2;
       if (hit) damageEnemy(100);
       if (hit || missile.life <= 0) {
       scene.remove(missile.mesh);
@@ -524,18 +545,8 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     }
     const missileHeld = !!(keys.KeyG || keys.KeyM || touch.missile || pad.missile);
     if (missileHeld && !previousMissile) {
-      if (locked) fireMissile();
-      else {
-        missileQueued = true;
-        missileQueueUntil = performance.now() + 4000;
-        denyMissile(true);
-      }
+      fireMissile(locked);
     }
-    if (missileQueued && locked) {
-      fireMissile();
-      missileQueued = false;
-    }
-    if (missileQueued && performance.now() > missileQueueUntil) missileQueued = false;
     previousMissile = missileHeld;
   }
 
@@ -558,7 +569,7 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     update,
     diagnostics: {
       active: true,
-      state: () => ({ hp: enemy.hp, alive: enemy.alive, locked, lockProgress, missileQueued, missilesLeft, mountedMissiles: (player.userData.missileRacks || []).filter(item => item.visible).length, activeMissiles: missiles.length, score, targetPosition: enemy.mesh.position.toArray(), targetDistance: enemy.mesh.position.distanceTo(player.position), bulletSpeed: BULLET_SPEED, aimVerticalRatio: aimVerticalRatio() }),
+      state: () => ({ hp: enemy.hp, alive: enemy.alive, locked, lockProgress, missileQueued: false, missilesLeft, mountedMissiles: (player.userData.missileRacks || []).filter(item => item.visible).length, activeMissiles: missiles.length, guidedMissiles: missiles.filter(item => item.guided).length, score, targetPosition: enemy.mesh.position.toArray(), targetDistance: enemy.mesh.position.distanceTo(player.position), bulletSpeed: BULLET_SPEED, aimVerticalRatio: aimVerticalRatio() }),
       placeTargetAhead,
       forceLock: () => { forcedLockUntil = performance.now() + 2500; locked = true; lockProgress = LOCK_ACQUIRE_TIME; return true; },
       fireMissile,

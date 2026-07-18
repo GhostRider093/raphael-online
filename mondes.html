@@ -59,6 +59,8 @@
     .game-topbar { position:absolute; z-index:30; top:max(12px,env(safe-area-inset-top)); left:14px; right:14px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; pointer-events:none; }
     .game-actions { display:flex; flex-wrap:wrap; gap:8px; pointer-events:auto; }
     .game-button { padding:9px 12px; color:#e8f7ff; text-decoration:none; border:1px solid rgba(255,255,255,.18); border-radius:8px; background:rgba(5,12,20,.72); backdrop-filter:blur(8px); font-size:12px; font-weight:800; }
+    #mobile-info-toggle { display:none; }
+    #mobile-info-drawer { display:none; }
     .world-ident { min-width:220px; padding:12px 14px; text-align:right; border:1px solid rgba(255,255,255,.14); border-radius:10px; background:rgba(5,12,20,.68); backdrop-filter:blur(8px); }
     #world-title { font-size:16px; font-weight:900; color:#e9f8ff; }
     #world-category { margin-top:4px; color:var(--cyan); font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1px; }
@@ -140,6 +142,13 @@
 
     @media (max-width:1050px) { #map-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
     @media (max-width:900px) { #world-touch { display:block; } }
+    @media (max-width:900px), (pointer:coarse) {
+      #mobile-info-toggle { display:inline-flex; }
+      #mobile-info-drawer { position:absolute; z-index:45; top:max(58px,calc(env(safe-area-inset-top) + 48px)); right:max(10px,env(safe-area-inset-right)); bottom:max(10px,env(safe-area-inset-bottom)); width:min(310px,calc(100vw - 20px)); overflow:auto; padding:10px; border:1px solid rgba(99,217,255,.32); border-radius:13px; background:rgba(3,10,18,.92); box-shadow:0 18px 55px rgba(0,0,0,.55); backdrop-filter:blur(12px); pointer-events:auto; }
+      #game.mobile-info-open #mobile-info-drawer { display:block; }
+      #mobile-info-drawer > aside, #mobile-info-drawer #combat-panel { position:relative !important; inset:auto !important; display:block; width:100% !important; margin:0 0 9px !important; transform:none !important; }
+      #mobile-info-drawer #race-panel[hidden], #mobile-info-drawer #combat-panel[hidden] { display:none !important; }
+    }
     @media (max-width:720px) {
       .catalog-header { padding:28px 16px 18px; }
       .catalog-nav { margin-bottom:25px; }
@@ -201,9 +210,11 @@
       <div class="game-actions">
         <a id="back-catalog" class="game-button" href="mondes.html">← Mondes</a>
         <a class="game-button" href="raphael2.html">Jeu principal</a>
+        <button id="mobile-info-toggle" class="game-button" type="button" aria-expanded="false">INFOS +</button>
       </div>
       <div class="world-ident"><div id="world-title">Monde</div><div id="world-category">Exploration</div></div>
     </div>
+    <div id="mobile-info-drawer" aria-hidden="true"></div>
     <aside id="game-hud">
       <div><strong id="mode-name">Pilote</strong></div>
       <div class="hud-grid">
@@ -271,6 +282,6 @@
     }
   }
   </script>
-  <script type="module" src="./maps/world-game.js?v=mobile-controls-20260718"></script>
+  <script type="module" src="./maps/world-game.js?v=mobile-lock-ui-20260718"></script>
 </body>
 </html>
