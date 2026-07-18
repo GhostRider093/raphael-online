@@ -1,3 +1,5 @@
+import { KENNEY_ROAD_LIBRARY, KENNEY_ROAD_PLACEMENTS } from './kenney-road-assets.js';
+
 export const PLAYER_MODES = [
   { id: 'chasseur', name: 'Chasseur', icon: '✈', type: 'flight', description: 'Vol rapide, exploration aérienne et rase-mottes.' },
   { id: 'robot', name: 'Robot Titan', icon: '◆', type: 'ground', description: 'Exploration terrestre lourde et franchissement.' },
@@ -23,6 +25,8 @@ export const ASSET_LIBRARY = {
   ruin3B: { url: '../assets/Ulvheim/ulvheim-A-2-ruin3B.glb', targetSize: 52, rotateX: -Math.PI / 2, label: 'Ruine Ulvheim 3B' },
   ruinA2Five: { url: '../assets/Ulvheim/ulvheim-A-2-ruin5.glb', targetSize: 72, rotateX: -Math.PI / 2, label: 'Ruine Ulvheim A2-5' }
 };
+
+Object.assign(ASSET_LIBRARY, KENNEY_ROAD_LIBRARY);
 
 const allModes = ['chasseur', 'robot', 'personnage'];
 
@@ -301,6 +305,17 @@ export const WORLD_MAPS = [
     assets: [],
     spawn: { ground: [0, 0, 430], air: [0, 120, 430] }, mission: 'Le Grand Prix des Titans',
     objectives: ['Franchir les 12 portes dans l’ordre', 'Rester entre les deux parois géantes', 'Battre le meilleur temps du circuit'], modes: allModes
+  },
+  {
+    id: 'kenney-road-lab', name: 'Ville des Routes 3D', icon: '▦', category: 'Objets 3D Kenney', seed: 22817, size: 1150,
+    tagline: 'Une map laboratoire construite uniquement avec les 72 objets du City Kit Roads.',
+    description: 'Routes, croisements, virages, pont, lampadaires, panneaux et zone de chantier sont disposés dans une grande grille jouable afin de tester le kit depuis le sol ou avec le chasseur.',
+    sky: 0x6f9fbd, fog: 0xb8cbd2, fogDensity: 0.00055, waterLevel: -80,
+    terrain: { kind: 'plains', base: 0, amplitude: 0, scale: 0.004, low: 0x4f6a4c, mid: 0x4f6a4c, high: 0x4f6a4c },
+    layout: 'object-lab', population: { trees: 0, rocks: 0, buildings: 0, towers: 0, crystals: 0 },
+    landmarks: [], assets: KENNEY_ROAD_PLACEMENTS,
+    spawn: { ground: [0, 0, 340], air: [0, 105, 430] }, mission: 'Inspection du nouveau kit routier',
+    objectives: ['Parcourir les 72 objets 3D', 'Traverser le rond-point et le pont', 'Inspecter la zone de chantier'], modes: allModes
   }
 ];
 

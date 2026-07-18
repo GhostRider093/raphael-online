@@ -1,8 +1,8 @@
 # Les mondes de Raphael
 
-Cette extension ajoute **21 cartes jouables** au projet Raphael. Elle conserve les jeux existants et leur ajoute un explorateur de mondes commun, utilisable avec le chasseur, le robot Azure Titan ou le personnage Pinstripe Shadows.
+Cette extension ajoute **22 cartes jouables** au projet Raphael. Elle conserve les jeux existants et leur ajoute un explorateur de mondes commun, utilisable avec le chasseur, le robot Azure Titan ou le personnage Pinstripe Shadows.
 
-Les cartes sont reliées par un réseau de portails. Chaque monde contient un anneau énergétique placé dans sa moitié nord : le traverser mène au monde suivant sans changer de pilote. Après `Frontière de l’Orage`, le réseau mène à `Vallée des Blocs`, puis au `Canyon des Titans`, avant de revenir à `Nova City`.
+Les cartes sont reliées par un réseau de portails. Chaque monde contient un anneau énergétique placé dans sa moitié nord : le traverser mène au monde suivant sans changer de pilote. Après `Frontière de l’Orage`, le réseau mène à `Vallée des Blocs`, au `Canyon des Titans`, puis à la `Ville des Routes 3D` avant de revenir à `Nova City`.
 
 ## Lancement
 
@@ -33,6 +33,7 @@ Double-cliquer sur `Lancer_mondes.bat`, puis choisir un monde et un pilote. On p
 | Frontière des Tempêtes | Haute montagne | Relief agressif, pistes de motocross et radar |
 | Vallée des Blocs | Aventure voxel | Relief cubique, rivière, village, mine et château en blocs |
 | Canyon des Titans | Course aérienne | Douze portes chronométrées entre deux parois montagneuses géantes |
+| Ville des Routes 3D | Objets 3D Kenney | Laboratoire jouable regroupant les 72 routes, ponts, panneaux, lumières et objets de chantier du kit CC0 |
 
 ## Commandes communes
 
