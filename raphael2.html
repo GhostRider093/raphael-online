@@ -16,6 +16,7 @@ body { margin: 0; overflow: hidden; font-family: Arial; }
 }
 
 button { padding: 15px; margin: 10px; font-size: 20px; }
+.worlds-button { background: #f2b544; color: #16120a; border: 0; border-radius: 8px; font-weight: 800; }
 
 #hud {
   position: absolute;
@@ -141,6 +142,7 @@ button { padding: 15px; margin: 10px; font-size: 20px; }
 
 <div id="menu">
   <h1>Jeu Trottinette</h1>
+  <button class="worlds-button" onclick="location.href='mondes.html'">Explorer les 21 mondes</button>
   <button onclick="start('scooter')">Jouer avec la trottinette</button>
   <button onclick="start('mech')">Jouer avec le personnage</button>
   <button onclick="start('car')">Jouer avec la voiture</button>

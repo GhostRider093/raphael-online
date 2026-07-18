@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Raphael — Les Mondes</title>
+  <style>
+    :root { color-scheme: dark; --cyan:#63d9ff; --lime:#a4ed72; --panel:rgba(7,15,25,.88); }
+    * { box-sizing:border-box; }
+    html, body { margin:0; min-height:100%; background:#07111c; color:#e8f5ff; font-family:Inter,Segoe UI,Arial,sans-serif; }
+    [hidden] { display:none !important; }
+    button, input, a { font:inherit; }
+
+    #catalog { min-height:100vh; background:
+      radial-gradient(circle at 15% 5%, rgba(42,132,171,.2), transparent 31rem),
+      radial-gradient(circle at 85% 18%, rgba(126,94,195,.16), transparent 34rem),
+      linear-gradient(180deg,#0a1725,#050a10 55%,#07111c); }
+    .catalog-header { max-width:1500px; margin:auto; padding:48px 28px 24px; }
+    .catalog-nav { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:36px; }
+    .back-link { color:#cbeeff; text-decoration:none; border:1px solid rgba(255,255,255,.16); border-radius:9px; padding:10px 14px; background:rgba(255,255,255,.05); }
+    .world-count { color:var(--lime); font:800 12px/1 Arial; letter-spacing:1px; text-transform:uppercase; }
+    .hero-kicker { color:var(--cyan); font:800 12px/1 Arial; letter-spacing:2.6px; text-transform:uppercase; }
+    h1 { max-width:900px; margin:12px 0 14px; font-size:clamp(38px,6vw,82px); line-height:.96; letter-spacing:-3px; }
+    .hero-copy { max-width:830px; color:rgba(222,240,252,.72); font-size:clamp(15px,2vw,19px); line-height:1.6; }
+    .mode-label { margin:34px 0 12px; color:rgba(235,247,255,.62); font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1.2px; }
+    #mode-picker { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; max-width:980px; }
+    .mode-choice { display:grid; grid-template-columns:44px 1fr; grid-template-rows:auto auto; gap:4px 10px; min-height:78px; padding:13px; text-align:left; cursor:pointer; color:#dceeff; border:1px solid rgba(255,255,255,.13); border-radius:12px; background:rgba(255,255,255,.045); }
+    .mode-choice > span { grid-row:1/3; display:grid; place-items:center; width:44px; height:44px; border-radius:10px; color:#83e7ff; background:rgba(70,190,235,.12); font-size:23px; }
+    .mode-choice strong { font-size:14px; align-self:end; }
+    .mode-choice small { color:rgba(220,237,249,.57); font-size:11px; line-height:1.25; }
+    .mode-choice.active { border-color:rgba(164,237,114,.72); background:rgba(82,132,48,.2); box-shadow:0 0 0 2px rgba(164,237,114,.08) inset; }
+    .mode-choice.active > span { color:#dfffc9; background:rgba(164,237,114,.15); }
+    .catalog-tools { max-width:1500px; margin:12px auto 0; padding:0 28px 22px; display:flex; align-items:center; gap:12px; }
+    #map-search { width:min(520px,100%); min-height:48px; padding:12px 16px; color:white; outline:none; border:1px solid rgba(255,255,255,.16); border-radius:11px; background:rgba(1,6,12,.56); }
+    #map-search:focus { border-color:var(--cyan); box-shadow:0 0 0 3px rgba(99,217,255,.1); }
+    #map-grid { max-width:1500px; margin:auto; padding:0 28px 70px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
+    .map-card { position:relative; min-height:500px; overflow:hidden; border:1px solid rgba(255,255,255,.12); border-radius:16px; background:linear-gradient(145deg,color-mix(in srgb,var(--map-color) 30%,#09121c),#08111a 54%); box-shadow:0 18px 55px rgba(0,0,0,.28); animation:card-in .45s both; animation-delay:var(--delay); }
+    .map-card::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(120deg,rgba(255,255,255,.07),transparent 38%); }
+    .map-visual { position:relative; height:135px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:
+      radial-gradient(circle at 50% 78%,color-mix(in srgb,var(--map-color) 80%,white),transparent 7%),
+      radial-gradient(ellipse at 50% 110%,color-mix(in srgb,var(--map-color) 70%,white),transparent 55%),
+      linear-gradient(180deg,color-mix(in srgb,var(--map-color) 72%,#0a1826),#101b24); }
+    .map-visual::before { content:""; position:absolute; left:-5%; right:-5%; bottom:-52px; height:100px; border-radius:50%; background:color-mix(in srgb,var(--map-color) 36%,#15271e); box-shadow:0 -11px 50px color-mix(in srgb,var(--map-color) 35%,transparent); }
+    .map-icon { position:relative; z-index:1; font-size:58px; color:#e6f8ff; text-shadow:0 6px 25px rgba(0,0,0,.55); transform:translateY(-4px); }
+    .map-number { position:absolute; top:12px; right:15px; color:rgba(255,255,255,.42); font:900 12px/1 Consolas,monospace; }
+    .map-content { position:relative; z-index:1; padding:20px 21px 22px; }
+    .map-category { color:var(--cyan); font:800 10px/1 Arial; text-transform:uppercase; letter-spacing:1.3px; }
+    .map-card h2 { margin:8px 0 6px; font-size:25px; letter-spacing:-.5px; }
+    .map-content p { color:rgba(222,238,249,.62); font-size:13px; line-height:1.48; }
+    .map-content .map-tagline { min-height:39px; color:#e9f6ff; font-weight:700; }
+    .map-content ul { min-height:64px; margin:14px 0 18px; padding-left:18px; color:rgba(190,224,240,.78); font-size:12px; line-height:1.55; }
+    .launch-map { display:block; width:100%; padding:12px 13px; text-align:center; text-decoration:none; color:#e7ffd6; font-size:12px; font-weight:900; border:1px solid rgba(164,237,114,.48); border-radius:9px; background:rgba(94,151,55,.2); }
+    .launch-map:hover { background:rgba(120,190,72,.32); border-color:var(--lime); }
+    @keyframes card-in { from { opacity:0; transform:translateY(14px); } }
+
+    #game { position:fixed; inset:0; overflow:hidden; background:#07111c; }
+    #world-canvas { position:absolute; inset:0; }
+    #world-canvas canvas { display:block; width:100% !important; height:100% !important; }
+    .game-topbar { position:absolute; z-index:30; top:max(12px,env(safe-area-inset-top)); left:14px; right:14px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; pointer-events:none; }
+    .game-actions { display:flex; flex-wrap:wrap; gap:8px; pointer-events:auto; }
+    .game-button { padding:9px 12px; color:#e8f7ff; text-decoration:none; border:1px solid rgba(255,255,255,.18); border-radius:8px; background:rgba(5,12,20,.72); backdrop-filter:blur(8px); font-size:12px; font-weight:800; }
+    .world-ident { min-width:220px; padding:12px 14px; text-align:right; border:1px solid rgba(255,255,255,.14); border-radius:10px; background:rgba(5,12,20,.68); backdrop-filter:blur(8px); }
+    #world-title { font-size:16px; font-weight:900; color:#e9f8ff; }
+    #world-category { margin-top:4px; color:var(--cyan); font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1px; }
+    #game-hud { position:absolute; z-index:24; left:15px; bottom:15px; width:min(330px,calc(100vw - 30px)); padding:13px 15px; border:1px solid rgba(255,255,255,.14); border-radius:11px; background:rgba(4,11,18,.68); backdrop-filter:blur(8px); color:rgba(225,242,252,.78); font:11px/1.6 Consolas,monospace; pointer-events:none; }
+    #game-hud strong { color:#a8ee78; }
+    #game-hud .hud-grid { display:grid; grid-template-columns:1fr 1fr; gap:2px 10px; margin:6px 0; }
+    #asset-status { color:#6fdaff; }
+    #portal-status { color:#b79cff; }
+    #portal-prompt { position:absolute; z-index:29; left:50%; bottom:92px; width:min(360px,calc(100vw - 28px)); padding:13px 16px; transform:translate(-50%,18px); opacity:0; text-align:center; border:1px solid rgba(119,232,255,.46); border-radius:12px; background:rgba(5,12,28,.78); backdrop-filter:blur(10px); pointer-events:none; transition:opacity .2s,transform .2s; }
+    #portal-prompt.visible { opacity:1; transform:translate(-50%,0); }
+    #portal-prompt strong { display:block; color:#8eeaff; font-size:13px; letter-spacing:.7px; }
+    #portal-prompt span { display:block; margin-top:3px; color:rgba(236,244,255,.75); font-size:10px; }
+    .portal-progress { height:4px; margin-top:9px; overflow:hidden; border-radius:4px; background:rgba(255,255,255,.12); }
+    #portal-progress-fill { width:100%; height:100%; transform:scaleX(0); transform-origin:left; background:linear-gradient(90deg,#58dcff,#ad7cff); box-shadow:0 0 12px #58dcff; }
+    #portal-flash { position:absolute; z-index:80; inset:0; opacity:0; pointer-events:none; background:radial-gradient(circle,#eafcff 0,#6ee7ff 22%,#6d46d7 58%,#050916 100%); transition:opacity .28s; }
+    #portal-flash.active { opacity:1; }
+    #combat-ui[hidden] { display:none; }
+    #flight-reticle { position:absolute; z-index:25; left:50%; top:44%; width:122px; height:122px; transform:translate(-50%,-50%); border:1px solid rgba(112,235,255,.88); border-radius:50%; color:#70ebff; pointer-events:none; box-shadow:0 0 22px rgba(55,205,255,.18),inset 0 0 25px rgba(55,205,255,.09); transition:color .16s,border-color .16s,box-shadow .16s; }
+    #flight-reticle::before,#flight-reticle::after { content:""; position:absolute; left:50%; top:50%; background:currentColor; opacity:.9; transform:translate(-50%,-50%); }
+    #flight-reticle::before { width:158px; height:1px; background:linear-gradient(90deg,currentColor 0 27%,transparent 27% 43%,currentColor 43% 57%,transparent 57% 73%,currentColor 73%); }
+    #flight-reticle::after { width:1px; height:158px; background:linear-gradient(180deg,currentColor 0 27%,transparent 27% 43%,currentColor 43% 57%,transparent 57% 73%,currentColor 73%); }
+    .reticle-inner-ring { position:absolute; inset:25px; border:1px solid currentColor; border-radius:50%; opacity:.72; box-shadow:0 0 9px rgba(75,221,255,.16); }
+    .reticle-inner-ring::before,.reticle-inner-ring::after { content:""; position:absolute; left:50%; top:50%; width:7px; height:7px; transform:translate(-50%,-50%); border:1px solid currentColor; border-radius:50%; }
+    .reticle-inner-ring::after { width:2px; height:2px; border:0; background:currentColor; box-shadow:0 0 8px currentColor; }
+    .reticle-ticks { position:absolute; inset:-7px; border-radius:50%; background:repeating-conic-gradient(from -1deg,currentColor 0 1deg,transparent 1deg 14deg); opacity:.38; -webkit-mask:radial-gradient(circle,transparent 0 61px,#000 62px 67px,transparent 68px); mask:radial-gradient(circle,transparent 0 61px,#000 62px 67px,transparent 68px); }
+    #reticle-range { position:absolute; left:50%; top:calc(100% + 9px); min-width:145px; transform:translateX(-50%); color:currentColor; font:700 9px/1 Consolas,monospace; letter-spacing:1px; text-align:center; text-shadow:0 0 6px rgba(60,222,255,.7); }
+    #flight-reticle.locked { color:#ff5b48; border-color:#ff5b48; box-shadow:0 0 28px rgba(255,70,45,.42),inset 0 0 25px rgba(255,70,45,.1); }
+    #flight-reticle.acquiring { color:#ffe268; border-color:#ffe268; }
+    #flight-reticle.denied { color:#ff2818; animation:combat-denied .14s linear 4; }
+    #aim-lead { position:absolute; z-index:26; display:none; width:22px; height:22px; margin:-11px 0 0 -11px; border:2px solid #fff27a; border-radius:50%; pointer-events:none; box-shadow:0 0 12px rgba(255,242,122,.6); }
+    #aim-lead.visible { display:block; }
+    #aim-lead::before,#aim-lead::after { content:""; position:absolute; left:50%; top:50%; background:#fff27a; transform:translate(-50%,-50%); }
+    #aim-lead::before { width:34px; height:1px; }
+    #aim-lead::after { width:1px; height:34px; }
+    #target-diamond { position:absolute; z-index:26; display:none; width:48px; height:48px; margin:-24px 0 0 -24px; border:2px solid #ffcf55; transform:rotate(45deg); pointer-events:none; box-shadow:0 0 18px rgba(255,207,85,.42); }
+    #target-diamond.visible { display:block; }
+    #target-diamond.acquiring { border-color:#fff06a; animation:diamond-pulse .4s ease-in-out infinite alternate; }
+    #target-diamond.locked { border-color:#ff523f; box-shadow:0 0 24px rgba(255,70,50,.72); }
+    #target-diamond::after { content:""; position:absolute; inset:8px; border:1px solid currentColor; }
+    #combat-panel { position:absolute; z-index:25; right:15px; top:92px; width:184px; padding:12px; border:1px solid rgba(91,224,255,.3); border-radius:12px; background:rgba(3,11,20,.72); backdrop-filter:blur(9px); color:#dff7ff; pointer-events:none; }
+    #radar-scope { position:relative; width:112px; height:112px; margin:0 auto 10px; overflow:hidden; border:1px solid rgba(104,235,255,.72); border-radius:50%; background:radial-gradient(circle,rgba(30,127,143,.18),rgba(2,17,25,.78) 70%); box-shadow:inset 0 0 22px rgba(46,219,255,.14); }
+    #radar-scope::before,#radar-scope::after { content:""; position:absolute; background:rgba(109,231,255,.22); }
+    #radar-scope::before { left:50%; top:0; bottom:0; width:1px; }
+    #radar-scope::after { top:50%; left:0; right:0; height:1px; }
+    #radar-sweep { position:absolute; left:50%; top:50%; width:50%; height:1px; transform-origin:left; background:linear-gradient(90deg,#73eeff,transparent); animation:radar-sweep 2.1s linear infinite; }
+    #radar-player { position:absolute; left:50%; top:50%; width:7px; height:9px; transform:translate(-50%,-50%); clip-path:polygon(50% 0,100% 100%,50% 76%,0 100%); background:#9eff77; }
+    #radar-target { position:absolute; left:50%; top:25%; width:8px; height:8px; transform:translate(-50%,-50%) rotate(45deg); border:2px solid #ff5b48; box-shadow:0 0 8px #ff5b48; }
+    #combat-lock-state { color:#ffcf55; font-size:11px; font-weight:900; line-height:1.35; }
+    #combat-lock-state.locked { color:#ff6350; }
+    #combat-lock-state.ok { color:#a5ed78; }
+    #combat-distance,#combat-ammo,#combat-audio-state { margin-top:3px; color:rgba(220,242,252,.72); font:10px/1.35 Consolas,monospace; }
+    #missile-rack-status { margin-top:5px; color:#ffda69; font:800 9px/1.25 Consolas,monospace; letter-spacing:.5px; }
+    #target-health-bar { height:5px; margin-top:8px; overflow:hidden; border-radius:5px; background:rgba(255,255,255,.12); }
+    #target-health-fill { width:100%; height:100%; transform-origin:left; background:linear-gradient(90deg,#ff4338,#ffc04c); }
+    #combat-score { margin-top:7px; color:#8feaff; font:10px Consolas,monospace; }
+    @keyframes radar-sweep { to { transform:rotate(360deg); } }
+    @keyframes diamond-pulse { from { transform:rotate(45deg) scale(.88); } to { transform:rotate(45deg) scale(1.12); } }
+    @keyframes combat-denied { 50% { opacity:.25; } }
+    #mission-panel { position:absolute; z-index:24; right:15px; bottom:15px; width:min(310px,calc(100vw - 30px)); padding:13px 15px; border:1px solid rgba(255,255,255,.14); border-radius:11px; background:rgba(4,11,18,.68); backdrop-filter:blur(8px); pointer-events:none; }
+    #mission-title { color:#ffd36d; font-size:12px; font-weight:900; }
+    #mission-list { margin:8px 0 0; padding-left:18px; color:rgba(225,241,251,.72); font-size:11px; line-height:1.55; }
+    #race-panel { position:absolute; z-index:26; left:50%; top:15px; width:230px; padding:10px 14px; transform:translateX(-50%); border:1px solid rgba(122,237,255,.5); border-radius:11px; background:rgba(3,12,20,.78); box-shadow:0 0 28px rgba(53,205,255,.12); backdrop-filter:blur(9px); text-align:center; pointer-events:none; }
+    #race-panel[hidden] { display:none; }
+    #race-title { color:#9eeeff; font-size:10px; font-weight:900; letter-spacing:1.2px; }
+    #race-gate { margin-top:3px; color:#effcff; font-size:15px; font-weight:900; }
+    #race-time { margin-top:2px; color:#b8ff76; font:700 18px/1.15 Consolas,monospace; }
+    #race-best { margin-top:2px; color:rgba(222,242,252,.68); font:9px Consolas,monospace; }
+    #world-touch { display:none; position:absolute; z-index:27; inset:0; pointer-events:none; }
+    #world-stick { position:absolute; left:18px; bottom:max(84px,calc(env(safe-area-inset-bottom) + 72px)); width:112px; height:112px; border:1px solid rgba(255,255,255,.23); border-radius:50%; background:rgba(4,11,18,.45); backdrop-filter:blur(5px); pointer-events:auto; touch-action:none; }
+    #world-knob { position:absolute; left:50%; top:50%; width:44px; height:44px; transform:translate(-50%,-50%); border-radius:50%; border:1px solid rgba(164,237,114,.78); background:rgba(164,237,114,.22); box-shadow:0 0 20px rgba(164,237,114,.16); }
+    .world-touch-buttons { position:absolute; right:18px; bottom:max(84px,calc(env(safe-area-inset-bottom) + 72px)); display:grid; grid-template-columns:repeat(2,64px); gap:9px; pointer-events:auto; }
+    .world-touch-button { width:64px; height:50px; color:#eefaff; border:1px solid rgba(255,255,255,.23); border-radius:9px; background:rgba(4,11,18,.64); font-size:10px; font-weight:900; touch-action:none; }
+    .world-touch-button.active { color:#edffdf; border-color:var(--lime); background:rgba(89,153,51,.38); }
+
+    @media (max-width:1050px) { #map-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media (max-width:720px) {
+      .catalog-header { padding:28px 16px 18px; }
+      .catalog-nav { margin-bottom:25px; }
+      h1 { letter-spacing:-1.8px; }
+      #mode-picker { grid-template-columns:1fr; }
+      .mode-choice { min-height:68px; }
+      .catalog-tools { padding:0 16px 16px; }
+      #map-grid { grid-template-columns:1fr; padding:0 16px 40px; }
+      .map-card { min-height:0; }
+      .map-content ul { min-height:0; }
+      .game-topbar { left:10px; right:10px; }
+      .world-ident { min-width:0; max-width:175px; padding:9px 10px; }
+      #world-title { font-size:13px; }
+      #game-hud { left:10px; top:64px; bottom:auto; width:180px; padding:9px 10px; font-size:9px; }
+      #game-hud .hud-grid { grid-template-columns:1fr; }
+      #mission-panel { display:none; }
+      #race-panel { top:272px; width:142px; padding:7px 9px; }
+      #race-title { font-size:8px; }
+      #race-gate { font-size:11px; }
+      #race-time { font-size:14px; }
+      #race-best { font-size:7px; }
+      #world-touch { display:block; }
+      .game-button { padding:8px 9px; font-size:10px; }
+      #portal-prompt { top:254px; bottom:auto; width:min(300px,calc(100vw - 28px)); }
+      #flight-reticle { top:48%; width:92px; height:92px; }
+      #flight-reticle::before { width:118px; }
+      #flight-reticle::after { height:118px; }
+      .reticle-inner-ring { inset:19px; }
+      .reticle-ticks { inset:-5px; -webkit-mask:radial-gradient(circle,transparent 0 45px,#000 46px 50px,transparent 51px); mask:radial-gradient(circle,transparent 0 45px,#000 46px 50px,transparent 51px); }
+      #reticle-range { top:calc(100% + 7px); min-width:120px; font-size:7px; }
+      #combat-panel { right:10px; top:72px; width:132px; padding:8px; }
+      #radar-scope { width:78px; height:78px; margin-bottom:6px; }
+      #combat-lock-state { font-size:9px; }
+      #combat-distance,#combat-ammo,#combat-audio-state,#combat-score,#missile-rack-status { font-size:8px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="catalog" hidden>
+    <header class="catalog-header">
+      <nav class="catalog-nav">
+        <a class="back-link" href="raphael2.html">← Jeu principal</a>
+        <span id="map-count" class="world-count">21 mondes</span>
+      </nav>
+      <div class="hero-kicker">Raphael · Atlas jouable</div>
+      <h1>Vingt et un mondes.<br>Trois façons de les vivre.</h1>
+      <p class="hero-copy">Chaque monde possède son relief, son réseau de circulation, ses monuments, ses objets 3D et une mission d’exploration. Choisissez d’abord le chasseur, le robot ou le personnage, puis entrez dans la map.</p>
+      <div class="mode-label">Choisir le pilote</div>
+      <div id="mode-picker"></div>
+    </header>
+    <div class="catalog-tools"><input id="map-search" type="search" placeholder="Rechercher une ville, une forêt, une montagne…" autocomplete="off"></div>
+    <section id="map-grid" aria-label="Catalogue des mondes"></section>
+  </main>
+
+  <main id="game" hidden>
+    <div id="world-canvas"></div>
+    <div class="game-topbar">
+      <div class="game-actions">
+        <a id="back-catalog" class="game-button" href="mondes.html">← Mondes</a>
+        <a class="game-button" href="raphael2.html">Jeu principal</a>
+      </div>
+      <div class="world-ident"><div id="world-title">Monde</div><div id="world-category">Exploration</div></div>
+    </div>
+    <aside id="game-hud">
+      <div><strong id="mode-name">Pilote</strong></div>
+      <div class="hud-grid">
+        <span id="world-speed">0 km/h</span><span id="world-altitude">Altitude 0 m</span>
+        <span id="world-coordinates">X 0 · Z 0</span><span id="world-gamepad">Aucune manette</span>
+      </div>
+      <div id="asset-status">Préparation des objets 3D…</div>
+      <div id="portal-status">Portail : recherche du prochain monde…</div>
+      <div>Clavier : flèches/WASD · Shift boost · F/Espace canon · G/M missile · V vue · Échap atlas</div>
+    </aside>
+    <aside id="mission-panel"><div id="mission-title">Mission</div><ol id="mission-list"></ol></aside>
+    <aside id="race-panel" hidden>
+      <div id="race-title">COURSE AÉRIENNE</div>
+      <div id="race-gate">PORTE 1 / 12</div>
+      <div id="race-time">00:00.000</div>
+      <div id="race-best">Record : --:--.---</div>
+    </aside>
+    <div id="world-touch" aria-hidden="true">
+      <div id="world-stick"><div id="world-knob"></div></div>
+      <div class="world-touch-buttons">
+        <button class="world-touch-button" data-world-touch="boost">BOOST</button>
+        <button class="world-touch-button" data-world-touch="jump">SAUT</button>
+        <button class="world-touch-button" data-world-touch="view">VUE</button>
+        <button class="world-touch-button" data-world-touch="portal">PORTAIL</button>
+        <button class="world-touch-button" data-world-touch="fire">CANON</button>
+        <button class="world-touch-button" data-world-touch="missile">MISSILE ×4</button>
+      </div>
+    </div>
+    <div id="combat-ui" hidden>
+      <div id="flight-reticle" aria-hidden="true">
+        <div class="reticle-ticks"></div>
+        <div class="reticle-inner-ring"></div>
+        <div id="reticle-range">CANON · PORTÉE -- M</div>
+      </div>
+      <div id="aim-lead" aria-hidden="true"></div>
+      <div id="target-diamond" aria-hidden="true"></div>
+      <aside id="combat-panel">
+        <div id="radar-scope"><div id="radar-sweep"></div><div id="radar-player"></div><div id="radar-target"></div></div>
+        <div id="combat-lock-state">RECHERCHE RADAR</div>
+        <div id="combat-distance">Distance -- m</div>
+        <div id="combat-ammo">Missiles 4 · Canon prêt</div>
+        <div id="missile-rack-status">SOUS AILES  ◆ ◆ ◆ ◆</div>
+        <div id="target-health-bar"><div id="target-health-fill"></div></div>
+        <div id="combat-score">Cible aérienne · PV 100</div>
+        <div id="combat-audio-state">Son : appuyez sur une commande</div>
+      </aside>
+    </div>
+    <div id="portal-prompt" role="status" aria-live="polite">
+      <strong id="portal-prompt-title">PORTAIL</strong>
+      <span id="portal-prompt-copy">Traversez l’anneau pour changer de monde</span>
+      <div class="portal-progress"><div id="portal-progress-fill"></div></div>
+    </div>
+    <div id="portal-flash" aria-hidden="true"></div>
+  </main>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./libs/three.module.js"
+    }
+  }
+  </script>
+  <script type="module" src="./maps/world-game.js"></script>
+</body>
+</html>
