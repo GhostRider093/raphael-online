@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../libs/GLTFLoader.js';
 import { WORLD_MAPS, PLAYER_MODES, getWorld, getMode, getPortalRoute } from './world-catalog.js?v=kenney-road-axis-20260718';
 import { buildWorld, animateWorld } from './world-builder.js?v=kenney-road-axis-20260718';
-import { createWorldCombat } from './world-combat.js?v=lock-rules-20260718';
+import { createWorldCombat } from './world-combat.js?v=quiet-lock-tone-20260719';
 
 const params = new URLSearchParams(location.search);
 const requestedMap = params.get('map');
@@ -304,13 +304,14 @@ function deadZone(value, zone = .13) {
 function readGamepad() {
   const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
   const pad = pads.find(item => !/audio|headset|speaker|microphone/i.test(item.id)) || null;
-  if (!pad) return { x: 0, y: 0, throttle: 0, brake: 0, boost: false, jump: false, view: false, portal: false, fire: false, missile: false, name: 'Aucune manette' };
+  if (!pad) return { x: 0, y: 0, throttle: 0, brake: 0, boost: false, acro: false, jump: false, view: false, portal: false, fire: false, missile: false, name: 'Aucune manette' };
   const standard = pad.mapping === 'standard' || /xbox|dual|playstation|microsoft/i.test(pad.id);
   const throttle = standard ? (pad.buttons[7]?.value || 0) : Number.isFinite(pad.axes[3]) ? (1 - pad.axes[3]) * .5 : 0;
   return {
     x: deadZone(pad.axes[0]), y: deadZone(pad.axes[1]), throttle,
     brake: standard ? (pad.buttons[6]?.value || 0) : 0,
     boost: !!pad.buttons[5]?.pressed,
+    acro: !!pad.buttons[10]?.pressed,
     jump: !!pad.buttons[0]?.pressed,
     fire: !!pad.buttons[0]?.pressed,
     missile: standard ? !!pad.buttons[2]?.pressed : !!pad.buttons[1]?.pressed,
@@ -371,18 +372,19 @@ function startWorld() {
   document.getElementById('mode-name').textContent = mode.name;
   document.getElementById('mission-title').textContent = world.mission;
   document.getElementById('mission-list').innerHTML = world.objectives.map(item => `<li>${item}</li>`).join('')
-    + (mode.type === 'flight' ? '<li>Détruire l’avion ennemi détecté au radar</li>' : '')
+    + (mode.type === 'flight' ? '<li>Abattre 10 chasseurs ennemis au radar</li><li>Missiles illimités</li>' : '')
     + `<li>Traverser le portail vers ${portalRoute.destination.name}</li>`;
   document.getElementById('back-catalog').href = `mondes.html?mode=${mode.id}`;
   const portalStatus = document.getElementById('portal-status');
   portalStatus.textContent = `Portail → ${portalRoute.destination.name}`;
 
   const keys = {};
-  const touch = { x: 0, y: 0, boost: false, jump: false, portal: false, fire: false, missile: false };
+  const touch = { x: 0, y: 0, boost: false, acro: false, jump: false, portal: false, fire: false, missile: false };
   const motion = { enabled: false, x: 0, y: 0, neutralBeta: 0, neutralGamma: 0, hasSample: false };
   // Tous les points de départ sont placés au sud de la zone jouable : le pilote
   // doit donc regarder vers le centre de la carte au lancement.
-  let yaw = 0, pitch = 0, speed = mode.type === 'flight' ? 35 : 0, verticalVelocity = 0, cameraWide = false, lastView = false;
+  let yaw = 0, pitch = 0, speed = mode.type === 'flight' ? 35 : 0, verticalVelocity = 0, cameraWide = mode.type === 'flight', lastView = false;
+  let aerobatic = null, aerobaticArmed = true;
   const clock = new THREE.Clock();
   const cameraForward = new THREE.Vector3(0, 0, -1);
   const getFlightForward = () => {
@@ -615,6 +617,7 @@ function startWorld() {
     const set = active => {
       button.classList.toggle('active', active);
       if (action === 'boost') touch.boost = active;
+      if (action === 'acro') touch.acro = active;
       if (action === 'jump') touch.jump = active;
       if (action === 'portal') touch.portal = active;
       if (action === 'fire') touch.fire = active;
@@ -640,13 +643,30 @@ function startWorld() {
   function updateFlight(dt, pad) {
     const yawInput = (keys.ArrowLeft || keys.KeyA || keys.KeyQ ? 1 : 0) + (keys.ArrowRight || keys.KeyD ? -1 : 0) - touch.x - motion.x - pad.x;
     const pitchInput = (keys.ArrowUp || keys.KeyI ? 1 : 0) + (keys.ArrowDown || keys.KeyK ? -1 : 0) + touch.y + motion.y + pad.y;
-    let targetSpeed = 38;
-    if (keys.KeyW || keys.KeyZ || touch.boost) targetSpeed = 72;
+    const acroHeld = !!(keys.KeyX || touch.acro || pad.acro);
+    const acroAxis = Math.max(Math.abs(yawInput), Math.abs(pitchInput));
+    if ((!acroHeld || acroAxis < .28) && !aerobatic) aerobaticArmed = true;
+    if (acroHeld && aerobaticArmed && !aerobatic && acroAxis > .55) {
+      aerobatic = Math.abs(yawInput) >= Math.abs(pitchInput)
+        ? { type: 'roll', direction: Math.sign(yawInput) || 1, elapsed: 0, duration: 1.05 }
+        : { type: 'loop', direction: Math.sign(pitchInput) || 1, elapsed: 0, duration: 1.55 };
+      aerobaticArmed = false;
+    }
+    const raceTuning = world.layout === 'race-circuit';
+    const cruiseSpeed = raceTuning ? 68 : 38;
+    const fullSpeed = raceTuning ? 128 : 72;
+    const boostSpeed = raceTuning ? 168 : 92;
+    let targetSpeed = cruiseSpeed;
+    if (keys.KeyW || keys.KeyZ || touch.boost) targetSpeed = fullSpeed;
     if (keys.KeyS || pad.brake > .1) targetSpeed = 12;
-    if (pad.throttle > .05) targetSpeed = 12 + pad.throttle * 72;
-    if (keys.ShiftLeft || keys.ShiftRight || pad.boost) targetSpeed = 92;
-    speed += (targetSpeed - speed) * Math.min(1, dt * 2.4);
-    yaw += THREE.MathUtils.clamp(yawInput, -1, 1) * 1.35 * dt;
+    if (pad.throttle > .05) targetSpeed = 12 + pad.throttle * fullSpeed;
+    if (keys.ShiftLeft || keys.ShiftRight || pad.boost) targetSpeed = boostSpeed;
+    speed += (targetSpeed - speed) * Math.min(1, dt * (raceTuning ? 3.25 : 2.4));
+    window.RaphaelFighterEngine?.update(speed / boostSpeed, targetSpeed >= boostSpeed * .9);
+    const steering = raceTuning
+      ? THREE.MathUtils.lerp(1.42, .92, THREE.MathUtils.clamp(speed / boostSpeed, 0, 1))
+      : 1.35;
+    yaw += THREE.MathUtils.clamp(yawInput, -1, 1) * steering * dt;
     pitch = THREE.MathUtils.clamp(pitch + THREE.MathUtils.clamp(pitchInput, -1, 1) * .82 * dt, -.62, .62);
     const forward = getFlightForward();
     player.position.addScaledVector(forward, speed * dt);
@@ -655,10 +675,22 @@ function startWorld() {
     const minimum = built.getHeight(player.position.x, player.position.z) + 9;
     player.position.y = THREE.MathUtils.clamp(player.position.y, minimum, 680);
     if (player.position.y <= minimum + .1) pitch = Math.max(0, pitch);
-    player.rotation.set(pitch, yaw, THREE.MathUtils.clamp(yawInput, -1, 1) * .5);
+    let acroRoll = 0, acroPitch = 0;
+    if (aerobatic) {
+      aerobatic.elapsed += dt;
+      const progress = THREE.MathUtils.clamp(aerobatic.elapsed / aerobatic.duration, 0, 1);
+      const angle = Math.PI * 2 * progress * aerobatic.direction;
+      if (aerobatic.type === 'roll') acroRoll = angle;
+      else acroPitch = -angle;
+      if (progress >= 1) aerobatic = null;
+    }
+    player.rotation.set(pitch + acroPitch, yaw, THREE.MathUtils.clamp(yawInput, -1, 1) * .5 + acroRoll);
     (player.userData.flames || []).forEach((flame, index) => flame.scale.setScalar(.75 + speed / 80 + Math.sin(performance.now() * .04 + index) * .08));
     cameraForward.lerp(forward, Math.min(1, dt * 4)).normalize();
-    const distance = cameraWide ? 90 : 48, height = cameraWide ? 28 : 12;
+    const speedRatio = raceTuning ? THREE.MathUtils.clamp(speed / boostSpeed, 0, 1) : 0;
+    camera.fov += ((raceTuning ? 64 + speedRatio * 18 : 64) - camera.fov) * Math.min(1, dt * 3.5);
+    camera.updateProjectionMatrix();
+    const distance = cameraWide ? 90 : 48 + speedRatio * 18, height = cameraWide ? 28 : 12 + speedRatio * 4;
     const desired = player.position.clone().addScaledVector(cameraForward, -distance).add(new THREE.Vector3(0, height, 0));
     camera.position.lerp(desired, Math.min(1, dt * 5.5));
     camera.lookAt(player.position.clone().addScaledVector(forward, 25));
@@ -779,6 +811,7 @@ function startWorld() {
     modeId: mode.id,
     objectCount: () => built.root.children.length,
     playerPosition: () => player.position.toArray(),
+    aerobatic: () => ({ active: aerobatic?.type || null, rotation: player.rotation.toArray().slice(0, 3) }),
     portalDestination: portalRoute.destination.id,
     portalPosition: () => built.portal?.position.toArray() || null,
     combat: combat.diagnostics,

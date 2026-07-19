@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-const LOCK_ACQUIRE_TIME = 2.1;
+const LOCK_SEARCH_DELAY = .85;
+const LOCK_ACQUIRE_TIME = 3.6;
 const LOCK_CAPTURE_RADIUS = 60;
 const LOCK_RELEASE_RADIUS = 92;
 const BULLET_SPEED = 560;
@@ -62,37 +63,25 @@ function buildEnemyJet() {
 
 function createAudioSystem(audioStateElement) {
   let context = null;
-  let engineGain = null;
-  let engineLow = null;
-  let engineHigh = null;
+  let radarBeepBuffer = null;
   let nextAcquireBeep = 0;
+  let lockOscillator = null;
+  let lockGain = null;
 
   function ensure() {
     if (!context) {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return null;
       context = new AudioContextClass();
-      engineGain = context.createGain();
-      engineGain.gain.value = .0001;
-      const filter = context.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 520;
-      engineLow = context.createOscillator();
-      engineHigh = context.createOscillator();
-      engineLow.type = 'sawtooth';
-      engineHigh.type = 'triangle';
-      engineLow.frequency.value = 64;
-      engineHigh.frequency.value = 118;
-      engineLow.connect(filter);
-      engineHigh.connect(filter);
-      filter.connect(engineGain);
-      engineGain.connect(context.destination);
-      engineLow.start();
-      engineHigh.start();
+      fetch('./assets/audio/radar-beep.ogg')
+        .then(response => response.ok ? response.arrayBuffer() : Promise.reject(new Error(`Radar beep ${response.status}`)))
+        .then(data => context.decodeAudioData(data))
+        .then(buffer => { radarBeepBuffer = buffer; })
+        .catch(error => console.warn('[world-combat] radar beep', error));
     }
     const renderState = () => {
       if (audioStateElement) audioStateElement.textContent = context.state === 'running'
-        ? 'Son : réacteur et combat actifs'
+        ? 'Son : moteur chasseur et combat actifs'
         : 'Son : prêt · touchez une commande';
     };
     if (context.state === 'suspended') context.resume().then(renderState).catch(renderState);
@@ -100,12 +89,20 @@ function createAudioSystem(audioStateElement) {
     return context;
   }
 
-  function updateEngine(speed) {
-    if (!context || !engineGain) return;
-    const amount = THREE.MathUtils.clamp(Math.abs(speed) / 92, 0, 1);
-    engineGain.gain.setTargetAtTime(.025 + amount * .045, context.currentTime, .08);
-    engineLow.frequency.setTargetAtTime(58 + amount * 72, context.currentTime, .06);
-    engineHigh.frequency.setTargetAtTime(112 + amount * 138, context.currentTime, .06);
+  // Le vrai moteur est gere par fighter-engine-audio.js.
+  function updateEngine() {}
+
+  function radarBeep(delay = 0, playbackRate = 1, volume = .18) {
+    const c = ensure();
+    if (!c || !radarBeepBuffer) return;
+    const source = c.createBufferSource();
+    const gain = c.createGain();
+    source.buffer = radarBeepBuffer;
+    source.playbackRate.value = playbackRate;
+    gain.gain.value = volume;
+    source.connect(gain);
+    gain.connect(c.destination);
+    source.start(c.currentTime + delay);
   }
 
   function noise(duration, volume, cutoff, tone = 0) {
@@ -130,26 +127,45 @@ function createAudioSystem(audioStateElement) {
     source.start();
   }
 
-  function gun() { noise(.085, .48, 1500, 78); }
-  function missile() { noise(1.05, .55, 1900, 115); }
-  function explosion() { noise(.9, .78, 850, 48); }
+  function gun() {
+    if (window.RaphaelFighterCannon) window.RaphaelFighterCannon.fireShot();
+    else noise(.085, .48, 1500, 78);
+  }
+  function missile() {
+    if (window.RaphaelMissileAudio) window.RaphaelMissileAudio.playLaunch();
+    else noise(1.05, .55, 1900, 115);
+  }
+  function explosion() {
+    if (window.RaphaelMissileAudio) window.RaphaelMissileAudio.playDestruction();
+    else noise(.9, .78, 850, 48);
+  }
   function lock() {
+    setLockContinuous(true);
+  }
+
+  function setLockContinuous(active) {
+    if (!active) {
+      if (lockGain && context) lockGain.gain.setTargetAtTime(.0001, context.currentTime, .025);
+      if (lockOscillator && context) {
+        const oscillator = lockOscillator;
+        oscillator.stop(context.currentTime + .14);
+      }
+      lockOscillator = null;
+      lockGain = null;
+      return;
+    }
+    if (lockOscillator) return;
     const c = ensure();
     if (!c) return;
-    const now = c.currentTime;
-    [0, .09].forEach((offset, index) => {
-      const oscillator = c.createOscillator();
-      const gain = c.createGain();
-      oscillator.type = 'square';
-      oscillator.frequency.value = index ? 980 : 740;
-      gain.gain.setValueAtTime(.0001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(.16, now + offset + .012);
-      gain.gain.exponentialRampToValueAtTime(.0001, now + offset + .075);
-      oscillator.connect(gain);
-      gain.connect(c.destination);
-      oscillator.start(now + offset);
-      oscillator.stop(now + offset + .085);
-    });
+    lockOscillator = c.createOscillator();
+    lockGain = c.createGain();
+    lockOscillator.type = 'square';
+    lockOscillator.frequency.value = 1080;
+    lockGain.gain.setValueAtTime(.0001, c.currentTime);
+    lockGain.gain.exponentialRampToValueAtTime(.032, c.currentTime + .08);
+    lockOscillator.connect(lockGain);
+    lockGain.connect(c.destination);
+    lockOscillator.start();
   }
 
   function acquire(progress) {
@@ -157,22 +173,12 @@ function createAudioSystem(audioStateElement) {
     if (!c || c.currentTime < nextAcquireBeep) return;
     const normalized = THREE.MathUtils.clamp(progress, 0, 1);
     nextAcquireBeep = c.currentTime + THREE.MathUtils.lerp(.42, .13, normalized);
-    const oscillator = c.createOscillator();
-    const gain = c.createGain();
-    oscillator.type = 'square';
-    oscillator.frequency.value = 620 + normalized * 260;
-    gain.gain.setValueAtTime(.0001, c.currentTime);
-    gain.gain.exponentialRampToValueAtTime(.2, c.currentTime + .012);
-    gain.gain.exponentialRampToValueAtTime(.0001, c.currentTime + .105);
-    oscillator.connect(gain);
-    gain.connect(c.destination);
-    oscillator.start();
-    oscillator.stop(c.currentTime + .115);
+    radarBeep(0, .82 + normalized * .38, .14 + normalized * .07);
   }
 
   document.addEventListener('keydown', ensure, { passive: true });
   document.addEventListener('pointerdown', ensure, { passive: true });
-  return { ensure, updateEngine, gun, missile, explosion, lock, acquire, isActive: () => !!context };
+  return { ensure, updateEngine, gun, missile, explosion, lock, acquire, setLockContinuous, isActive: () => !!context };
 }
 
 export function createWorldCombat({ scene, camera, player, world, mode, getHeight, getForward, getSpeed }) {
@@ -214,17 +220,27 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
   const explosions = [];
   let locked = false;
   let lockProgress = 0;
+  let lockSearchHold = 0;
   let lockAnnounced = false;
   let forcedLockUntil = 0;
   let deniedUntil = 0;
   let gunCooldown = 0;
   let previousMissile = false;
-  let missilesLeft = 4;
+  const targetKillCount = 10;
+  let kills = 0;
+  const missilesLeft = Infinity;
   let score = 0;
 
-  const bulletGeometry = new THREE.CylinderGeometry(.11, .11, 4.2, 6);
+  const bulletGeometry = new THREE.CylinderGeometry(.18, .27, 8.5, 8);
   bulletGeometry.rotateX(Math.PI / 2);
-  const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffee55 });
+  const bulletMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffed63,
+    transparent: true,
+    opacity: 1,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false
+  });
 
   function targetPoint() { return enemy.mesh.position.clone(); }
 
@@ -256,15 +272,28 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     scene.remove(enemy.mesh);
     locked = false;
     lockProgress = 0;
+    lockSearchHold = 0;
     score += 100;
+    kills++;
     radarTarget.style.display = 'none';
     diamond.className = '';
     aimLead.className = '';
     reticle.classList.remove('locked', 'acquiring', 'denied');
     lockState.className = 'ok';
-    lockState.textContent = 'CIBLE DÉTRUITE';
-    distanceState.textContent = 'Mission aérienne accomplie';
-    scoreState.textContent = `Score ${score} · avion ennemi détruit`;
+    lockState.textContent = `CIBLE DÉTRUITE · ${kills}/${targetKillCount}`;
+    distanceState.textContent = kills >= targetKillCount ? 'Mission aérienne accomplie' : 'Nouvel adversaire en approche';
+    scoreState.textContent = `Score ${score} · chasseurs ${kills}/${targetKillCount}`;
+    if (kills < targetKillCount) {
+      setTimeout(() => {
+        enemy.hp = enemy.maxHp;
+        enemy.alive = true;
+        enemy.phase = 0;
+        scene.add(enemy.mesh);
+        placeTargetAhead(390 + Math.random() * 100);
+        lockState.className = '';
+        lockState.textContent = `CONTACT ${kills + 1}/${targetKillCount} · RECHERCHE RADAR`;
+      }, 1800);
+    }
   }
 
   function damageEnemy(amount) {
@@ -281,6 +310,7 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     const mesh = new THREE.Mesh(bulletGeometry, bulletMaterial);
     mesh.position.copy(player.position).addScaledVector(muzzleForward, 11);
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+    mesh.renderOrder = 40;
     scene.add(mesh);
     bullets.push({ mesh, velocity: direction.multiplyScalar(BULLET_SPEED), life: 2.3 });
   }
@@ -304,13 +334,26 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     missileSmoke.push({ mesh: puff, life: .72, maxLife: .72 });
   }
 
+  function addMissileFlame(body) {
+    const flameGroup = new THREE.Group();
+    const outer = new THREE.Mesh(
+      new THREE.ConeGeometry(.68, 5.4, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xff5a08, transparent: true, opacity: .78, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false })
+    );
+    const core = new THREE.Mesh(
+      new THREE.ConeGeometry(.38, 3.5, 10, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, opacity: .98, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false })
+    );
+    outer.rotation.x = core.rotation.x = -Math.PI / 2;
+    flameGroup.position.z = -2.5;
+    flameGroup.renderOrder = 35;
+    flameGroup.add(outer, core);
+    body.add(flameGroup);
+    body.userData.missileFlame = flameGroup;
+  }
+
   function fireMissile(forceGuided) {
     if (!enemy.alive) return false;
-    if (missilesLeft <= 0) {
-      lockState.className = 'locked';
-      lockState.textContent = 'PLUS DE MISSILES';
-      return false;
-    }
     const guided = forceGuided ?? locked;
     if (!guided) denyMissile();
     audio.missile();
@@ -319,18 +362,13 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     if (mountedMissile) {
       player.updateWorldMatrix(true, true);
       mountedMissile.getWorldPosition(launchPosition);
-      mountedMissile.visible = false;
     }
-    missilesLeft--;
     const direction = getForward().normalize();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(.2, .13, 3.8, 10), new THREE.MeshStandardMaterial({ color: 0xaeb8c4, roughness: .3, metalness: .7 }));
     body.geometry.rotateX(Math.PI / 2);
     body.position.copy(launchPosition).addScaledVector(direction, 1.5);
     body.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(.3, 2.5, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xff7300, transparent: true, opacity: .85, blending: THREE.AdditiveBlending, depthWrite: false }));
-    flame.rotation.x = Math.PI / 2;
-    flame.position.z = 2.3;
-    body.add(flame);
+    addMissileFlame(body);
     scene.add(body);
     missiles.push({ mesh: body, velocity: direction.multiplyScalar(125), life: 9, trailClock: 0, guided });
     return true;
@@ -411,14 +449,17 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
       lockProgress = LOCK_ACQUIRE_TIME;
     } else if (insideCapture) {
       locked = false;
-      lockProgress = Math.min(LOCK_ACQUIRE_TIME, lockProgress + dt);
+      lockSearchHold = Math.min(LOCK_SEARCH_DELAY, lockSearchHold + dt);
+      if (lockSearchHold >= LOCK_SEARCH_DELAY) lockProgress = Math.min(LOCK_ACQUIRE_TIME, lockProgress + dt);
       if (lockProgress >= LOCK_ACQUIRE_TIME) locked = true;
     } else {
       locked = false;
       lockProgress = 0;
+      lockSearchHold = 0;
     }
 
     if (locked && !lockAnnounced) audio.lock();
+    audio.setLockContinuous(locked);
     if (insideCapture && !locked) audio.acquire(lockProgress / LOCK_ACQUIRE_TIME);
     lockAnnounced = locked;
     reticle.classList.toggle('locked', locked);
@@ -429,8 +470,13 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     aimLead.className = '';
     const overlapsMobileHud = innerWidth <= 720 && aim && aim.sx > innerWidth - 155 && aim.sy < 292;
     if (aim?.visible && aim.screen < 300 && !overlapsMobileHud) {
-      diamond.style.left = `${THREE.MathUtils.clamp(aim.sx, 27, innerWidth - 27)}px`;
-      diamond.style.top = `${THREE.MathUtils.clamp(aim.sy, 27, innerHeight - 27)}px`;
+      const acquisitionRatio = locked ? 1 : THREE.MathUtils.clamp(lockProgress / LOCK_ACQUIRE_TIME, 0, 1);
+      const searchStrength = insideCapture && !locked ? 1 - acquisitionRatio : 0;
+      const phase = performance.now() * .0042;
+      const orbitX = searchStrength * (Math.cos(phase) * 72 + Math.sin(phase * 2.3) * 14);
+      const orbitY = searchStrength * (Math.sin(phase) * 48 + Math.cos(phase * 1.7) * 10);
+      diamond.style.left = `${THREE.MathUtils.clamp(aim.sx + orbitX, 27, innerWidth - 27)}px`;
+      diamond.style.top = `${THREE.MathUtils.clamp(aim.sy + orbitY, 27, innerHeight - 27)}px`;
       diamond.classList.add('visible', locked ? 'locked' : insideCapture ? 'acquiring' : 'tracking');
     }
 
@@ -454,16 +500,18 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
       lockState.textContent = 'TIR AUTORISÉ · AVION ENNEMI';
     } else if (insideCapture) {
       lockState.className = '';
-      lockState.textContent = `ACQUISITION ${Math.round(lockProgress / LOCK_ACQUIRE_TIME * 100)}%`;
+      lockState.textContent = lockSearchHold < LOCK_SEARCH_DELAY
+        ? 'RECHERCHE RADAR…'
+        : `ACQUISITION ${Math.round(lockProgress / LOCK_ACQUIRE_TIME * 100)}%`;
     } else {
       lockState.className = '';
       lockState.textContent = 'ALIGNEZ LE LOSANGE';
     }
     distanceState.textContent = `Distance ${Math.round(aim?.distance || targetPoint().distanceTo(player.position))} m`;
     reticleRange.textContent = `CANON · CIBLE ${Math.round(aim?.distance || targetPoint().distanceTo(player.position))} M`;
-    ammoState.textContent = `Missiles ${missilesLeft} · Canon ${gunCooldown <= 0 ? 'prêt' : 'recharge'}`;
-    if (missileRackState) missileRackState.textContent = `SOUS AILES  ${'◆ '.repeat(missilesLeft)}${'◇ '.repeat(4 - missilesLeft)}`.trim();
-    if (missileButton) missileButton.textContent = `MISSILE ×${missilesLeft}`;
+    ammoState.textContent = `Missiles ∞ · Canon ${gunCooldown <= 0 ? 'prêt' : 'recharge'}`;
+    if (missileRackState) missileRackState.textContent = 'SOUS AILES  ◆ ∞ ◆';
+    if (missileButton) missileButton.textContent = 'MISSILE ∞';
     healthFill.style.transform = `scaleX(${enemy.hp / enemy.maxHp})`;
     scoreState.textContent = `Cible aérienne · PV ${enemy.hp} / ${enemy.maxHp} · Score ${score}`;
   }
@@ -495,6 +543,8 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
       }
       missile.mesh.position.addScaledVector(missile.velocity, dt);
       if (missile.velocity.lengthSq() > 1) missile.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), missile.velocity.clone().normalize());
+      const flame = missile.mesh.userData.missileFlame;
+      if (flame) flame.scale.set(1 + Math.sin(performance.now() * .045) * .12, 1 + Math.sin(performance.now() * .061) * .18, 1);
       const hit = missile.guided && enemy.alive && missile.mesh.position.distanceTo(targetPoint()) < enemy.radius + 2;
       if (hit) damageEnemy(100);
       if (hit || missile.life <= 0) {
@@ -569,7 +619,7 @@ export function createWorldCombat({ scene, camera, player, world, mode, getHeigh
     update,
     diagnostics: {
       active: true,
-      state: () => ({ hp: enemy.hp, alive: enemy.alive, locked, lockProgress, missileQueued: false, missilesLeft, mountedMissiles: (player.userData.missileRacks || []).filter(item => item.visible).length, activeMissiles: missiles.length, guidedMissiles: missiles.filter(item => item.guided).length, score, targetPosition: enemy.mesh.position.toArray(), targetDistance: enemy.mesh.position.distanceTo(player.position), bulletSpeed: BULLET_SPEED, aimVerticalRatio: aimVerticalRatio() }),
+      state: () => ({ hp: enemy.hp, alive: enemy.alive, locked, lockProgress, missileQueued: false, missilesLeft, kills, targetKillCount, mountedMissiles: (player.userData.missileRacks || []).filter(item => item.visible).length, activeMissiles: missiles.length, guidedMissiles: missiles.filter(item => item.guided).length, score, targetPosition: enemy.mesh.position.toArray(), targetDistance: enemy.mesh.position.distanceTo(player.position), bulletSpeed: BULLET_SPEED, aimVerticalRatio: aimVerticalRatio() }),
       placeTargetAhead,
       forceLock: () => { forcedLockUntil = performance.now() + 2500; locked = true; lockProgress = LOCK_ACQUIRE_TIME; return true; },
       fireMissile,

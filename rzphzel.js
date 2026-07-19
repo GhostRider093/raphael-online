@@ -49,6 +49,8 @@ const TURN_SPD    = 0.048;
 let flightPitch = 0;
 let flightVisualPitch = 0;
 let flightSpeed = 0;
+let flightAerobatic = null;
+let flightAerobaticArmed = true;
 let flightGamepadIndex = null;
 let flightGamepadStatus = "manette non detectee";
 let groundGamepadIndex = null;
@@ -3282,7 +3284,7 @@ function updateFlightHud() {
                     : playerMode === "wargun" ? "Wargun"
                     : "Vue avion";
   hudEl.innerHTML =
-    `${flightLabel} &nbsp; Stick=diriger &nbsp; RT/throttle=vitesse &nbsp; W/Z=accel &nbsp; A/D=lacet &nbsp; fleches=pitch &nbsp; M=manette`
+    `${flightLabel} &nbsp; Stick=diriger &nbsp; X/L3+direction=vrille/looping &nbsp; RT/throttle=vitesse &nbsp; W/Z=accel &nbsp; M=manette`
     + `<br><span style="font-size:22px;font-weight:bold">${speedKmh} <small>km/h</small></span>`
     + `&nbsp;&nbsp;<span style="font-size:18px;font-weight:bold">${altitude} <small>m</small></span>`
     + `&nbsp;&nbsp;<span style="opacity:0.75">[SURVOL]</span>`
@@ -3380,6 +3382,16 @@ function updateFlyoverMode(delta) {
   pitchInput = clampValue(pitchInput, -1, 1);
   climbInput = clampValue(climbInput, -1, 1);
 
+  const acroHeld = !!(keys["KeyX"] || (gamepad && readGamepadButton(gamepad, 10)));
+  const acroAxis = Math.max(Math.abs(yawInput), Math.abs(pitchInput));
+  if ((!acroHeld || acroAxis < 0.28) && !flightAerobatic) flightAerobaticArmed = true;
+  if (acroHeld && flightAerobaticArmed && !flightAerobatic && acroAxis > 0.55) {
+    flightAerobatic = Math.abs(yawInput) >= Math.abs(pitchInput)
+      ? { type: "roll", direction: Math.sign(yawInput) || 1, elapsed: 0, duration: 1.05 }
+      : { type: "loop", direction: Math.sign(pitchInput) || 1, elapsed: 0, duration: 1.55 };
+    flightAerobaticArmed = false;
+  }
+
   if (keyboardForward) targetSpeed = Math.max(targetSpeed, FLIGHT_MAX_SPEED * 0.58);
   if (keyboardBrake) targetSpeed = 0;
   if (isBoost) targetSpeed *= 1.25;
@@ -3388,6 +3400,9 @@ function updateFlyoverMode(delta) {
   targetSpeed *= combatFlightMods.speed;
   flightSpeed += (targetSpeed - flightSpeed) * Math.min(1, delta * FLIGHT_ACCEL_RATE);
   if (Math.abs(flightSpeed) < 0.05) flightSpeed = 0;
+  if (playerMode === "chasseur") {
+    window.RaphaelFighterEngine?.update(Math.abs(flightSpeed) / FLIGHT_MAX_SPEED, isBoost);
+  }
 
   playerYaw += yawInput * FLIGHT_YAW_RATE * combatFlightMods.yaw * delta;
   flightPitch = clampValue(flightPitch + pitchInput * FLIGHT_PITCH_RATE * delta, -0.48, 0.52);
@@ -3415,7 +3430,16 @@ function updateFlyoverMode(delta) {
   flightVisualPitch += (trajectoryPitch - flightVisualPitch) * Math.min(1, delta * 6.5);
   const bank = yawInput * 0.45;   // inverse : ailes inclinees dans le bon sens
   // Le modele OBJ a son axe de tangage visuel inverse par rapport au repere de vol.
-  player.rotation.set(-flightVisualPitch, playerYaw, bank);
+  let acroRoll = 0, acroPitch = 0;
+  if (flightAerobatic) {
+    flightAerobatic.elapsed += delta;
+    const progress = clampValue(flightAerobatic.elapsed / flightAerobatic.duration, 0, 1);
+    const angle = Math.PI * 2 * progress * flightAerobatic.direction;
+    if (flightAerobatic.type === "roll") acroRoll = angle;
+    else acroPitch = -angle;
+    if (progress >= 1) flightAerobatic = null;
+  }
+  player.rotation.set(-flightVisualPitch + acroPitch, playerYaw, bank + acroRoll);
   if (player.userData.propeller) {
     player.userData.propeller.rotation.z += delta * (22 + Math.abs(flightSpeed) * 0.85);
   }
@@ -3426,8 +3450,8 @@ function updateFlyoverMode(delta) {
   speed = clampValue(Math.abs(flightSpeed) / FLIGHT_MAX_SPEED * MAX_SPEED, 0, MAX_BOOST);
   scooterState = "SURVOL";
 
-  const camDist = 11 + Math.min(7, Math.abs(flightSpeed) / FLIGHT_MAX_SPEED * 7);
-  const camHeight = 3.8 + Math.max(0, flightPitch) * 3;
+  const camDist = 24 + Math.min(10, Math.abs(flightSpeed) / FLIGHT_MAX_SPEED * 10);
+  const camHeight = 7.2 + Math.max(0, flightPitch) * 4;
   const desiredCamera = player.position.clone()
     .addScaledVector(forward, -camDist)
     .add(new THREE.Vector3(0, camHeight, 0));

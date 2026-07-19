@@ -278,14 +278,12 @@ function buildRoads(world, root) {
     addVoxelTrail(root, world, [[-250, 70], [-80, 40], [80, 90], [170, 140], [330, 220]], 13);
     addVoxelTrail(root, world, [[-180, -40], [10, -120], [190, -210], [340, -330]], 12);
   } else if (world.layout === 'race-circuit') {
-    const radius = world.terrain.raceRadius || 350;
-    const points = [];
-    for (let i = 0; i <= 64; i++) {
-      const angle = i / 64 * Math.PI * 2;
-      points.push([Math.sin(angle) * radius, Math.cos(angle) * radius]);
+    const points = (world.raceCourse || []).map(point => [point.x, point.z]);
+    if (points.length) {
+      points.push(points[0]);
+      addPolyline(root, world, points, 20);
+      addRoadSegment(root, world, points[0], [0, half], 24);
     }
-    addPolyline(root, world, points, 13);
-    addRoadSegment(root, world, [0, radius], [0, half], 20);
   } else if (world.layout === 'grid' || world.layout === 'boulevards' || world.layout === 'strip') {
     const offsets = world.layout === 'strip' ? [-110, 0, 110] : [-240, -120, 0, 120, 240];
     offsets.forEach(offset => {
@@ -442,6 +440,47 @@ function buildCrystals(world, root, random) {
     dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
   }
   root.add(mesh);
+}
+
+// Mobilier leger partage par toutes les cartes. L'instanciation permet
+// d'enrichir les grands espaces sans multiplier les draw calls.
+function buildWorldSupplies(world, root, random) {
+  const crateCount = Math.max(36, Math.round(world.size / 28));
+  const beaconCount = Math.ceil(crateCount * .55);
+  const group = new THREE.Group();
+  group.name = 'world-supplies';
+  const crate = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(2.8, 2.2, 2.8),
+    new THREE.MeshStandardMaterial({ color: 0x78634a, roughness: .88, metalness: .08 }),
+    crateCount
+  );
+  const beacon = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(.28, .42, 5.5, 7),
+    new THREE.MeshStandardMaterial({ color: 0x66737a, emissive: 0x16536a, emissiveIntensity: .75, roughness: .5, metalness: .35 }),
+    beaconCount
+  );
+  const dummy = new THREE.Object3D();
+  for (let i = 0; i < crateCount; i++) {
+    const point = randomGroundPoint(world, random, 125);
+    const scale = .7 + random() * 1.25;
+    dummy.position.set(point.x, point.y + 1.1 * scale, point.z);
+    dummy.scale.setScalar(scale);
+    dummy.rotation.set(0, random() * Math.PI * 2, 0);
+    dummy.updateMatrix();
+    crate.setMatrixAt(i, dummy.matrix);
+  }
+  for (let i = 0; i < beaconCount; i++) {
+    const point = randomGroundPoint(world, random, 145);
+    const scale = .8 + random() * .7;
+    dummy.position.set(point.x, point.y + 2.75 * scale, point.z);
+    dummy.scale.setScalar(scale);
+    dummy.rotation.set(0, random() * Math.PI * 2, 0);
+    dummy.updateMatrix();
+    beacon.setMatrixAt(i, dummy.matrix);
+  }
+  crate.castShadow = crate.receiveShadow = beacon.castShadow = true;
+  group.add(crate, beacon);
+  root.add(group);
 }
 
 function standardMaterial(color, emissive = 0x000000) {
@@ -741,6 +780,7 @@ export function buildWorld(scene, world, onProgress, portalRoute) {
   buildBuildings(world, root, random);
   buildTowers(world, root, random);
   buildCrystals(world, root, random);
+  buildWorldSupplies(world, root, random);
   (world.landmarks || []).forEach(landmark => root.add(buildLandmark(world, landmark)));
   const raceGates = buildRaceCourse(world, root);
   const portal = buildPortal(world, portalRoute, root);

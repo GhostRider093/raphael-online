@@ -86,6 +86,7 @@
   }
 
   function startCannonAudio() {
+    if (window.RaphaelFighterCannon) return;
     const audio = ensureCannonAudio();
     if (!audio) return;
     if (audio.context.state === "suspended") audio.context.resume();
@@ -98,6 +99,10 @@
   }
 
   function pulseCannonAudio() {
+    if (window.RaphaelFighterCannon) {
+      window.RaphaelFighterCannon.fireShot();
+      return;
+    }
     if (!cannonAudio) return;
     const now = cannonAudio.context.currentTime;
     cannonAudio.master.gain.cancelScheduledValues(now);
@@ -107,6 +112,7 @@
   }
 
   function stopCannonAudio() {
+    if (window.RaphaelFighterCannon) return;
     if (!cannonAudio || !cannonAudio.firing) return;
     cannonAudio.firing = false;
     const now = cannonAudio.context.currentTime;
@@ -118,6 +124,7 @@
   // Debloque WebAudio sur la premiere interaction utilisateur. Certains
   // navigateurs bloquent sinon tous les sons, meme lorsque le tir fonctionne.
   function unlockCannonAudio() {
+    if (window.RaphaelFighterCannon) return;
     const audio = ensureCannonAudio();
     if (audio && audio.context.state === "suspended") audio.context.resume();
   }
@@ -222,18 +229,19 @@
       : new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion).normalize();
     const start = player.position.clone().addScaledVector(fwd, 4);
     const tracer = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.055, 0.085, 2.8, 6),
+      new THREE.CylinderGeometry(0.13, 0.2, 7.5, 8),
       new THREE.MeshBasicMaterial({
-        color: 0xffd85a,
+        color: 0xffec75,
         transparent: true,
-        opacity: 0.96,
+        opacity: 1,
         blending: THREE.AdditiveBlending,
-        depthWrite: false
+        depthWrite: false,
+        depthTest: false
       })
     );
-    tracer.rotation.x = Math.PI / 2;
     tracer.position.copy(start);
-    tracer.quaternion.copy(player.quaternion);
+    tracer.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), fwd);
+    tracer.renderOrder = 40;
     scene.add(tracer);
     cannonRounds.push({ mesh: tracer, vel: fwd.multiplyScalar(CANNON_SPEED), life: CANNON_LIFE });
     pulseCannonAudio();

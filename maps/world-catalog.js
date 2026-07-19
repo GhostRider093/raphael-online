@@ -279,9 +279,9 @@ export const WORLD_MAPS = [
   {
     id: 'titan-race-canyon', name: 'Canyon des Titans', icon: '⛰', category: 'Course aérienne', seed: 21691, size: 1800,
     tagline: 'Des parois gigantesques transforment la montagne en circuit pour chasseurs.',
-    description: 'Une muraille extérieure et un massif central dessinent un anneau de vitesse vertigineux. Douze portes lumineuses imposent la trajectoire entre les falaises, avec un chronomètre et un meilleur temps.',
+    description: 'Un grand circuit rapide alterne lignes droites, courbes ouvertes, chicane, S et épingle entre les falaises, avec chronomètre et meilleur temps.',
     sky: 0x4e7292, fog: 0x7c8991, fogDensity: 0.00072, waterLevel: -110,
-    terrain: { kind: 'race-canyon', base: 25, amplitude: 230, scale: 0.0048, raceRadius: 350, low: 0x332f2c, mid: 0x655a4c, high: 0xb3a78d },
+    terrain: { kind: 'race-canyon', base: 25, amplitude: 230, scale: 0.0048, raceRadius: 600, low: 0x332f2c, mid: 0x655a4c, high: 0xb3a78d },
     layout: 'race-circuit', population: { trees: 34, rocks: 360, buildings: 6, towers: 14, crystals: 28 },
     landmarks: [
       { type: 'radar', x: 0, z: 0, scale: 2.4 },
@@ -289,22 +289,26 @@ export const WORLD_MAPS = [
       { type: 'arch', x: 0, z: -350, scale: 1.5 }
     ],
     raceCourse: [
-      { x: 0, z: 350, clearance: 70 },
-      { x: 175, z: 303, clearance: 76 },
-      { x: 303, z: 175, clearance: 66 },
-      { x: 350, z: 0, clearance: 82 },
-      { x: 303, z: -175, clearance: 72 },
-      { x: 175, z: -303, clearance: 64 },
-      { x: 0, z: -350, clearance: 80 },
-      { x: -175, z: -303, clearance: 70 },
-      { x: -303, z: -175, clearance: 86 },
-      { x: -350, z: 0, clearance: 68 },
-      { x: -303, z: 175, clearance: 78 },
-      { x: -175, z: 303, clearance: 66 }
+      { x: 0, z: 650, clearance: 72 },
+      { x: 310, z: 650, clearance: 78 },
+      { x: 585, z: 500, clearance: 70 },
+      { x: 650, z: 210, clearance: 90 },
+      { x: 470, z: 35, clearance: 68 },
+      { x: 620, z: -135, clearance: 82 },
+      { x: 520, z: -430, clearance: 66 },
+      { x: 230, z: -650, clearance: 92 },
+      { x: -130, z: -650, clearance: 74 },
+      { x: -420, z: -520, clearance: 84 },
+      { x: -610, z: -270, clearance: 70 },
+      { x: -390, z: -105, clearance: 96 },
+      { x: -610, z: 45, clearance: 76 },
+      { x: -575, z: 345, clearance: 88 },
+      { x: -360, z: 565, clearance: 70 },
+      { x: -95, z: 470, clearance: 82 }
     ],
     assets: [],
     spawn: { ground: [0, 0, 430], air: [0, 120, 430] }, mission: 'Le Grand Prix des Titans',
-    objectives: ['Franchir les 12 portes dans l’ordre', 'Rester entre les deux parois géantes', 'Battre le meilleur temps du circuit'], modes: allModes
+    objectives: ['Franchir les 16 portes dans l’ordre', 'Maîtriser la chicane et l’épingle', 'Battre le meilleur temps du circuit'], modes: allModes
   },
   {
     id: 'kenney-road-lab', name: 'Ville des Routes 3D', icon: '▦', category: 'Objets 3D Kenney', seed: 22817, size: 1400,
@@ -318,6 +322,30 @@ export const WORLD_MAPS = [
     objectives: ['Parcourir les 72 objets 3D', 'Traverser le rond-point et le pont', 'Inspecter la zone de chantier'], modes: allModes
   }
 ];
+
+// Les cartes sont authored dans leur repere historique puis etendues ici. Cela
+// double largeur et longueur (surface x4) sans grossir les objets 3D.
+const WORLD_LINEAR_SCALE = 2;
+const WORLD_POPULATION_SCALE = 2.5;
+const scaleXZ = item => {
+  if (Number.isFinite(item?.x)) item.x *= WORLD_LINEAR_SCALE;
+  if (Number.isFinite(item?.z)) item.z *= WORLD_LINEAR_SCALE;
+};
+
+WORLD_MAPS.forEach(world => {
+  world.size *= WORLD_LINEAR_SCALE;
+  if (Number.isFinite(world.terrain?.raceRadius)) world.terrain.raceRadius *= WORLD_LINEAR_SCALE;
+  Object.keys(world.population || {}).forEach(key => {
+    world.population[key] = Math.ceil(world.population[key] * WORLD_POPULATION_SCALE);
+  });
+  (world.landmarks || []).forEach(scaleXZ);
+  (world.assets || []).forEach(scaleXZ);
+  (world.raceCourse || []).forEach(scaleXZ);
+  ['ground', 'air'].forEach(kind => {
+    const spawn = world.spawn?.[kind];
+    if (spawn) { spawn[0] *= WORLD_LINEAR_SCALE; spawn[2] *= WORLD_LINEAR_SCALE; }
+  });
+});
 
 export function getWorld(id) {
   return WORLD_MAPS.find(world => world.id === id) || WORLD_MAPS[0];
