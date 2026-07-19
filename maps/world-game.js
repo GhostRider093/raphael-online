@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from '../libs/GLTFLoader.js';
 import { WORLD_MAPS, PLAYER_MODES, getWorld, getMode, getPortalRoute } from './world-catalog.js?v=kenney-road-axis-20260718';
-import { buildWorld, animateWorld } from './world-builder.js?v=kenney-road-axis-20260718';
+import { buildWorld, animateWorld } from './world-builder.js?v=ethereal-archway-20260719';
 import { createWorldCombat } from './world-combat.js?v=quiet-lock-tone-20260719';
 
 const params = new URLSearchParams(location.search);
@@ -345,6 +345,16 @@ function startWorld() {
   const spawn = mode.type === 'flight' ? world.spawn.air : world.spawn.ground;
   const spawnX = spawn[0], spawnZ = spawn[2];
   player.position.set(spawnX, mode.type === 'flight' ? spawn[1] : built.getHeight(spawnX, spawnZ), spawnZ);
+  if (params.get('portalPreview') === '1' && built.portal) {
+    const portalData = built.portal.userData.portal;
+    const previewZ = built.portal.position.z + 95;
+    player.position.set(
+      built.portal.position.x,
+      mode.type === 'flight' ? portalData.centerY : built.getHeight(built.portal.position.x, previewZ),
+      previewZ
+    );
+    player.rotation.y = 0;
+  }
   scene.add(player);
   const mixers = [];
   if (mode.type === 'flight') {
@@ -758,12 +768,12 @@ function startWorld() {
     portalPromptTitle.textContent = `PORTAIL → ${portalData.destinationName}`;
     if (charging) {
       // Un chasseur en boost ne reste que quelques dixièmes de seconde dans
-      // l'anneau : la traversée physique doit donc verrouiller très vite.
+      // l'arche : la traversée physique doit donc verrouiller très vite.
       portalCharge = Math.min(1, portalCharge + dt * (inside ? 5.5 : 2.15));
       portalPromptCopy.textContent = inside ? 'Passage inter-monde en cours…' : 'Activation à distance…';
     } else {
       portalCharge = Math.max(0, portalCharge - dt * 1.8);
-      portalPromptCopy.textContent = `${Math.round(horizontalDistance)} m · traversez l’anneau ou maintenez E / bouton portail`;
+      portalPromptCopy.textContent = `${Math.round(horizontalDistance)} m · traversez la grande arche ou maintenez E / bouton portail`;
     }
     portalProgressFill.style.transform = `scaleX(${portalCharge})`;
     portalStatus.textContent = `Portail → ${portalData.destinationName} · ${Math.round(horizontalDistance)} m`;

@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from '../libs/GLTFLoader.js';
+import { OBJLoader } from '../libs/loaders/OBJLoader.js';
 import { ASSET_LIBRARY } from './world-catalog.js?v=kenney-road-axis-20260718';
 
 const loader = new GLTFLoader();
+const portalObjLoader = new OBJLoader();
+const portalTextureLoader = new THREE.TextureLoader();
 const assetCache = new Map();
 
 function seededRandom(seed) {
@@ -657,46 +660,48 @@ function buildPortal(world, route, root) {
   portal.name = `portal-to-${route.destination.id}`;
   portal.position.set(route.x, groundY, route.z);
 
-  const cyan = new THREE.MeshStandardMaterial({
-    color: 0x58dcff, emissive: 0x0b82c5, emissiveIntensity: 3.4,
-    roughness: .24, metalness: .46
-  });
-  const violet = new THREE.MeshStandardMaterial({
-    color: 0x9a6dff, emissive: 0x5928d8, emissiveIntensity: 2.8,
-    roughness: .22, metalness: .38
-  });
   const energy = new THREE.MeshBasicMaterial({
-    color: 0x77e8ff, transparent: true, opacity: .26,
+    color: 0x77e8ff, transparent: true, opacity: .2,
     side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending
   });
 
-  const centerY = 13.5;
-  const outer = new THREE.Mesh(new THREE.TorusGeometry(13.5, 1.35, 18, 72), cyan);
-  outer.position.y = centerY;
-  outer.castShadow = true;
-  outer.userData.portalRing = { direction: 1, speed: .34 };
-  portal.add(outer);
-
-  const inner = new THREE.Mesh(new THREE.TorusGeometry(10.9, .46, 12, 64), violet);
-  inner.position.set(0, centerY, .25);
-  inner.rotation.set(.08, .18, 0);
-  inner.userData.portalRing = { direction: -1, speed: .58 };
-  portal.add(inner);
-
-  const core = new THREE.Mesh(new THREE.CircleGeometry(11.35, 64), energy);
-  core.position.set(0, centerY, .42);
+  const centerY = 21;
+  const core = new THREE.Mesh(new THREE.PlaneGeometry(19, 31), energy);
+  core.position.set(0, centerY, -.45);
   core.userData.portalCore = true;
   portal.add(core);
 
-  const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x182a3b, emissive: 0x071b32, emissiveIntensity: .8, roughness: .52, metalness: .62 });
-  [-9.6, 9.6].forEach(x => {
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.7, 7.5, 10), baseMaterial);
-    pillar.position.set(x, 3.75, 0);
-    pillar.castShadow = true;
-    portal.add(pillar);
+  const texture = portalTextureLoader.load('./assets/portal-archway/ethereal-rune-archway.png');
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  portalObjLoader.load('./assets/portal-archway/ethereal-rune-archway.obj', object => {
+    object.traverse(node => {
+      if (!node.isMesh) return;
+      node.material = new THREE.MeshStandardMaterial({
+        map: texture, color: 0xffffff, emissive: 0x123b55, emissiveIntensity: .72,
+        roughness: .56, metalness: .18, side: THREE.DoubleSide
+      });
+      node.castShadow = true;
+      node.receiveShadow = true;
+    });
+    object.updateMatrixWorld(true);
+    let box = new THREE.Box3().setFromObject(object);
+    const size = box.getSize(new THREE.Vector3());
+    object.scale.setScalar(48 / Math.max(size.y, .001));
+    object.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(object);
+    const center = box.getCenter(new THREE.Vector3());
+    object.position.x -= center.x;
+    object.position.y -= box.min.y;
+    object.position.z -= center.z;
+    object.name = 'ethereal-rune-archway';
+    object.userData.portalArchway = true;
+    portal.add(object);
   });
+
+  const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x182a3b, emissive: 0x071b32, emissiveIntensity: .8, roughness: .52, metalness: .62 });
   const platform = new THREE.Mesh(new THREE.CylinderGeometry(17, 19, 1.1, 32), baseMaterial);
-  platform.scale.z = .38;
+  platform.scale.set(1.28, 1.08, .44);
   platform.position.y = .35;
   platform.receiveShadow = true;
   portal.add(platform);
@@ -708,7 +713,7 @@ function buildPortal(world, route, root) {
     );
     particle.userData.portalParticle = {
       angle: i / 24 * Math.PI * 2,
-      radius: 8.5 + (i % 5) * 1.05,
+      radius: 12 + (i % 5) * 1.15,
       speed: .42 + (i % 4) * .08,
       depth: ((i % 7) - 3) * .48,
       centerY
@@ -716,14 +721,14 @@ function buildPortal(world, route, root) {
     portal.add(particle);
   }
 
-  const light = new THREE.PointLight(0x60dcff, 42, 115, 2);
+  const light = new THREE.PointLight(0x60dcff, 55, 145, 2);
   light.position.set(0, centerY, 4);
   portal.add(light);
   portal.userData.portal = {
     destinationId: route.destination.id,
     destinationName: route.destination.name,
     centerY: groundY + centerY,
-    activationRadius: 17
+    activationRadius: 24
   };
   root.add(portal);
   return portal;
